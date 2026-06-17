@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/c/Users/alitm/Documents/**)",
+      "PowerShell(npm *)",
+      "PowerShell(Move-Item *)"
+    ]
+  }
+}
