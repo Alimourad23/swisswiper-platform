@@ -11,12 +11,12 @@ import {
   isOverdue,
   PRIORITY_DOT,
 } from "@/lib/tasks/format";
-import { setStatus } from "@/lib/tasks/actions";
+import { purgeTask, restoreTask, setStatus } from "@/lib/tasks/actions";
 import QuickAdd from "@/components/tasks/QuickAdd";
 import TaskDetail from "@/components/tasks/TaskDetail";
 import Avatar, { AvatarStack } from "@/components/tasks/Avatar";
 
-type Scope = "mine" | "all" | "overdue" | "week";
+type Scope = "mine" | "all" | "overdue" | "week" | "trash";
 type SortKey = "due" | "priority";
 type View = "list" | "board";
 
@@ -49,6 +49,23 @@ export default function TasksBoard({
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
   const [now, setNow] = useState(0);
 
+  // When the URL changes (e.g. sidebar "Team board" / "My tasks", or a
+  // notification deep-link), the server re-renders with new initial* props but
+  // useState initialisers don't re-run. Sync view/scope/open during render the
+  // moment those props change (React's recommended reset-on-prop-change).
+  const [navKey, setNavKey] = useState(`${initialView}|${initialScope}`);
+  const curKey = `${initialView}|${initialScope}`;
+  if (navKey !== curKey) {
+    setNavKey(curKey);
+    setView(initialView);
+    setScope(initialScope);
+  }
+  const [prevOpen, setPrevOpen] = useState(initialOpenId);
+  if (initialOpenId !== prevOpen) {
+    setPrevOpen(initialOpenId);
+    setOpenId(initialOpenId);
+  }
+
   // Keep local state in sync after a server refresh (realtime / mutations).
   useEffect(() => setTasks(initialTasks), [initialTasks]);
 
@@ -75,13 +92,21 @@ export default function TasksBoard({
   }, [refresh]);
 
   const byId = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
-  const allTags = useMemo(
-    () => Array.from(new Set(tasks.flatMap((t) => t.tags))).sort(),
+  const active = useMemo(() => tasks.filter((t) => !t.deleted_at), [tasks]);
+  const trashed = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.deleted_at)
+        .sort((a, b) => (b.deleted_at ?? "").localeCompare(a.deleted_at ?? "")),
     [tasks],
+  );
+  const allTags = useMemo(
+    () => Array.from(new Set(active.flatMap((t) => t.tags))).sort(),
+    [active],
   );
 
   const visible = useMemo(() => {
-    let list = tasks;
+    let list = active;
     if (scope === "mine")
       list = list.filter((t) => t.created_by === userId || t.assignees.includes(userId ?? ""));
     else if (scope === "overdue")
@@ -102,7 +127,7 @@ export default function TasksBoard({
       if (da !== db) return da - db;
       return b.created_at.localeCompare(a.created_at);
     });
-  }, [tasks, scope, tag, assignee, sort, userId, now]);
+  }, [active, scope, tag, assignee, sort, userId, now]);
 
   const openTask = openId ? tasks.find((t) => t.id === openId) ?? null : null;
 
@@ -119,6 +144,16 @@ export default function TasksBoard({
 
   function toggleDone(t: Task) {
     move(t.id, t.status === "done" ? "todo" : "done");
+  }
+
+  function restore(id: string) {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, deleted_at: null } : t)));
+    void restoreTask(id);
+  }
+
+  function purge(id: string) {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    void purgeTask(id);
   }
 
   return (
@@ -161,6 +196,21 @@ export default function TasksBoard({
               { v: "priority", label: "Sort: Priority" },
             ]}
           />
+          <button
+            type="button"
+            onClick={() => setScope((s) => (s === "trash" ? "all" : "trash"))}
+            className={[
+              "flex items-center gap-1.5 rounded-[var(--radius-control)] border px-3 py-2 text-sm font-medium transition-colors",
+              scope === "trash"
+                ? "border-peri-deep bg-peri-soft text-peri-deep"
+                : "border-hairline text-muted hover:bg-bg hover:text-ink",
+            ].join(" ")}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+            </svg>
+            Trash{trashed.length > 0 ? ` (${trashed.length})` : ""}
+          </button>
           <div className="flex rounded-[var(--radius-control)] border border-hairline p-0.5">
             {(["list", "board"] as View[]).map((v) => (
               <button
@@ -180,7 +230,27 @@ export default function TasksBoard({
       </div>
 
       {/* Body */}
-      {visible.length === 0 ? (
+      {scope === "trash" ? (
+        trashed.length === 0 ? (
+          <EmptyState scope={scope} />
+        ) : (
+          <div className="sw-card divide-y divide-hairline overflow-hidden">
+            <p className="bg-bg/60 px-5 py-2.5 text-xs text-hint">
+              Deleted tasks. Restore them, or (if you created it) delete permanently.
+            </p>
+            {trashed.map((t) => (
+              <TrashRow
+                key={t.id}
+                task={t}
+                byId={byId}
+                isCreator={t.created_by === userId}
+                onRestore={() => restore(t.id)}
+                onPurge={() => purge(t.id)}
+              />
+            ))}
+          </div>
+        )
+      ) : visible.length === 0 ? (
         <EmptyState scope={scope} />
       ) : view === "list" ? (
         <div className="sw-card divide-y divide-hairline overflow-hidden">
@@ -317,6 +387,45 @@ function Badges({ task }: { task: Task }) {
         </span>
       ))}
     </>
+  );
+}
+
+function TrashRow({
+  task,
+  byId,
+  isCreator,
+  onRestore,
+  onPurge,
+}: {
+  task: Task;
+  byId: Map<string, Profile>;
+  isCreator: boolean;
+  onRestore: () => void;
+  onPurge: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-5 py-3.5">
+      <span className="min-w-0 flex-1 truncate text-sm text-muted line-through">{task.title}</span>
+      <AvatarStack ids={task.assignees} byId={byId} />
+      <button
+        type="button"
+        onClick={onRestore}
+        className="rounded-[var(--radius-control)] border border-hairline px-3 py-1.5 text-xs font-medium text-peri-deep hover:bg-peri-soft"
+      >
+        Restore
+      </button>
+      {isCreator && (
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm(`Permanently delete "${task.title}"? This can't be undone.`)) onPurge();
+          }}
+          className="rounded-[var(--radius-control)] px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+        >
+          Delete permanently
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -458,11 +567,17 @@ function EmptyState({ scope }: { scope: Scope }) {
         ? "Nothing due this week. "
         : scope === "mine"
           ? "No tasks assigned to you. "
-          : "No tasks yet. ";
+          : scope === "trash"
+            ? "Trash is empty. "
+            : "No tasks yet. ";
   return (
     <div className="sw-card flex flex-col items-center gap-2 px-6 py-16 text-center">
       <p className="text-sm font-medium text-ink">{msg}</p>
-      <p className="text-sm text-muted">Add one above — it appears for the whole team instantly.</p>
+      <p className="text-sm text-muted">
+        {scope === "trash"
+          ? "Deleted tasks appear here and can be restored."
+          : "Add one above — it appears for the whole team instantly."}
+      </p>
     </div>
   );
 }

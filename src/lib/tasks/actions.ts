@@ -226,9 +226,38 @@ export async function removeAssignee(taskId: string, userId: string): Promise<Ac
   return { ok: true };
 }
 
-/* ── Delete (creator only — enforced by RLS) ────────────────────────────── */
+/* ── Soft-delete / restore / permanent delete ───────────────────────────── */
 
+/* Move a task to Trash (reversible). It's an UPDATE, so the same RLS as
+   editing applies (team tasks: any member; personal: creator/assignee). */
 export async function deleteTask(id: string): Promise<ActionResult> {
+  const c = await ctx();
+  if (!c) return { ok: false, error: "Not signed in." };
+  const { error } = await c.supabase
+    .from("tasks")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  refresh();
+  return { ok: true };
+}
+
+/* Bring a task back from Trash. */
+export async function restoreTask(id: string): Promise<ActionResult> {
+  const c = await ctx();
+  if (!c) return { ok: false, error: "Not signed in." };
+  const { error } = await c.supabase
+    .from("tasks")
+    .update({ deleted_at: null, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  refresh();
+  return { ok: true };
+}
+
+/* Permanently remove a task (creator only — enforced by the DELETE RLS
+   policy). Used from the Trash view. */
+export async function purgeTask(id: string): Promise<ActionResult> {
   const c = await ctx();
   if (!c) return { ok: false, error: "Not signed in." };
   const { error } = await c.supabase.from("tasks").delete().eq("id", id);

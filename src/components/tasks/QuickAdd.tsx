@@ -5,12 +5,14 @@ import type { Profile } from "@/lib/tasks/types";
 import { createTask } from "@/lib/tasks/actions";
 import { dateInputToIso } from "@/lib/tasks/format";
 import AssigneeSelect from "@/components/tasks/AssigneeSelect";
+import CategoryPicker from "@/components/tasks/CategoryPicker";
 
 /* The quick-add bar: title + assignee + optional due date. Enter creates the
    task with sensible defaults (team / todo / normal). */
 export default function QuickAdd({ profiles }: { profiles: Profile[] }) {
   const [title, setTitle] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [due, setDue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -23,11 +25,13 @@ export default function QuickAdd({ profiles }: { profiles: Profile[] }) {
       const res = await createTask({
         title: t,
         assigneeIds: assignees,
+        tags,
         dueAt: dateInputToIso(due),
       });
       if (res.ok) {
         setTitle("");
         setAssignees([]);
+        setTags([]);
         setDue("");
       } else {
         setError(res.error);
@@ -61,6 +65,7 @@ export default function QuickAdd({ profiles }: { profiles: Profile[] }) {
             }
             compact
           />
+          <CategoryPicker value={tags} onChange={setTags} variant="popover" />
           <input
             type="date"
             value={due}

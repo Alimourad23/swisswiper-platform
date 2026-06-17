@@ -33,6 +33,7 @@ export async function GET(request: Request) {
     .from("tasks")
     .select("id, title, due_at, created_by, status")
     .neq("status", "done")
+    .is("deleted_at", null)
     .not("due_at", "is", null)
     .lt("due_at", todayEnd.toISOString());
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -13,6 +13,8 @@ import {
 import { isoToDateInput, dateInputToIso, displayName } from "@/lib/tasks/format";
 import Avatar from "@/components/tasks/Avatar";
 import AssigneeSelect from "@/components/tasks/AssigneeSelect";
+import CategoryPicker from "@/components/tasks/CategoryPicker";
+import MentionTextarea from "@/components/tasks/MentionTextarea";
 
 /* Slide-over panel to view & edit a single task. Field edits are saved with
    the "Save changes" button; status and assignees apply immediately because
@@ -33,7 +35,7 @@ export default function TaskDetail({
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [visibility, setVisibility] = useState<TaskVisibility>(task.visibility);
   const [due, setDue] = useState(isoToDateInput(task.due_at));
-  const [tags, setTags] = useState(task.tags.join(", "));
+  const [tags, setTags] = useState<string[]>(task.tags);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -44,7 +46,7 @@ export default function TaskDetail({
     setPriority(task.priority);
     setVisibility(task.visibility);
     setDue(isoToDateInput(task.due_at));
-    setTags(task.tags.join(", "));
+    setTags(task.tags);
   }, [task]);
 
   useEffect(() => {
@@ -69,10 +71,7 @@ export default function TaskDetail({
           priority,
           visibility,
           dueAt: dateInputToIso(due),
-          tags: tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean),
+          tags,
         },
         profiles,
       );
@@ -153,15 +152,17 @@ export default function TaskDetail({
             />
           </Field>
 
-          <Field label="Notes  ·  @mention a teammate to notify them">
-            <textarea
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wider text-hint">
+              Notes  ·  type @ to mention a teammate
+            </span>
+            <MentionTextarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
+              onChange={setNotes}
+              profiles={profiles}
               placeholder="Add detail, or @mention a teammate…"
-              className="w-full resize-y rounded-[var(--radius-control)] bg-bg px-3 py-2.5 text-sm text-ink placeholder:text-hint focus:outline-none focus:ring-1 focus:ring-peri"
             />
-          </Field>
+          </div>
 
           <Field label="Assignees">
             <div className="flex flex-wrap items-center gap-2">
@@ -215,25 +216,20 @@ export default function TaskDetail({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Visibility">
-              <select
-                value={visibility}
-                onChange={(e) => setVisibility(e.target.value as TaskVisibility)}
-                className="w-full rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-peri"
-              >
-                <option value="team">Team</option>
-                <option value="personal">Personal</option>
-              </select>
-            </Field>
-            <Field label="Tags  ·  comma separated">
-              <input
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="design, urgent"
-                className="w-full rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:outline-none focus:ring-1 focus:ring-peri"
-              />
-            </Field>
+          <Field label="Visibility">
+            <select
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as TaskVisibility)}
+              className="w-full rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-peri"
+            >
+              <option value="team">Team</option>
+              <option value="personal">Personal</option>
+            </select>
+          </Field>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-hint">Categories</span>
+            <CategoryPicker value={tags} onChange={setTags} variant="inline" />
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -248,7 +244,7 @@ export default function TaskDetail({
               disabled={pending}
               className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
             >
-              Delete
+              Move to Trash
             </button>
           ) : (
             <span />

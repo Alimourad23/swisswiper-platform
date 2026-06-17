@@ -19,6 +19,7 @@ export default async function TasksPage({
   //   ?view=board → "Team board" (board layout)
   const initialView = view === "board" ? "board" : "list";
   const initialScope = view === "mine" ? "mine" : "all";
+  const activeCount = tasks.filter((t) => !t.deleted_at).length;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -26,7 +27,7 @@ export default async function TasksPage({
         icon={m.icon}
         title={m.name}
         subtitle="A shared to-do list for the team. Assign, track and get notified — live for everyone."
-        right={<span className="text-xs text-hint">{tasks.length} task{tasks.length === 1 ? "" : "s"}</span>}
+        right={<span className="text-xs text-hint">{activeCount} task{activeCount === 1 ? "" : "s"}</span>}
       />
       <TasksBoard
         initialTasks={tasks}

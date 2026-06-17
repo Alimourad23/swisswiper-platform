@@ -13,7 +13,10 @@ export default function TasksPulse({ tasks, userId }: { tasks: Task[]; userId: s
   useEffect(() => setNow(Date.now()), []);
 
   const mine = tasks.filter(
-    (t) => t.status !== "done" && (t.created_by === userId || t.assignees.includes(userId ?? "")),
+    (t) =>
+      !t.deleted_at &&
+      t.status !== "done" &&
+      (t.created_by === userId || t.assignees.includes(userId ?? "")),
   );
   const dueToday = mine.filter((t) => isDueToday(t.due_at, now)).length;
   const overdue = mine.filter((t) => isOverdue(t.due_at, now)).length;

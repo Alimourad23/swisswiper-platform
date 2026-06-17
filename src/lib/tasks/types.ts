@@ -25,9 +25,23 @@ export type Task = {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  /** Soft-delete marker. Non-null = in Trash, excluded from normal views. */
+  deleted_at: string | null;
   /** User ids of everyone assigned (joined in by the data layer). */
   assignees: string[];
 };
+
+/* Starter SwissWiper categories. These are just suggested values for the
+   tasks.tags column — users can also type their own. */
+export const TASK_CATEGORIES = [
+  "Marketing",
+  "Sales",
+  "Ops",
+  "Product",
+  "Finance",
+  "Personal",
+  "Admin",
+] as const;
 
 export const STATUS_COLUMNS: { key: TaskStatus; label: string }[] = [
   { key: "todo", label: "To do" },

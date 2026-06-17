@@ -2,7 +2,7 @@
    time-related is rendered on the CLIENT in the viewer's device timezone so
    "today"/"overdue" follow the person looking, not the server. */
 
-import type { TaskPriority } from "@/lib/tasks/types";
+import type { Profile, TaskPriority } from "@/lib/tasks/types";
 
 function dayStart(ms: number): number {
   const d = new Date(ms);
@@ -91,4 +91,23 @@ export function initialsOf(name: string | null, email: string | null): string {
 
 export function displayName(name: string | null, email: string | null): string {
   return name || email || "Unknown";
+}
+
+/* The handle to insert for an @mention so it resolves back to this person in
+   the parser (which matches first name / full-name-without-spaces / email
+   local part). Prefers the first name when unique on the team, else the full
+   name without spaces. */
+export function mentionHandle(profile: Profile, team: Profile[]): string {
+  const name = displayName(profile.full_name, profile.email);
+  const first = name.split(/\s+/)[0] ?? "";
+  const firstClean = first.replace(/[^a-zA-Z0-9._-]/g, "");
+  const firstLower = firstClean.toLowerCase();
+  const collision = team.some(
+    (p) =>
+      p.id !== profile.id &&
+      displayName(p.full_name, p.email).split(/\s+/)[0]?.toLowerCase() === firstLower,
+  );
+  if (firstClean && !collision) return firstClean;
+  const full = name.replace(/\s+/g, "").replace(/[^a-zA-Z0-9._-]/g, "");
+  return full || firstClean || (profile.email ?? "").split("@")[0];
 }
