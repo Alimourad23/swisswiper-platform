@@ -13,6 +13,8 @@ import OverviewToday from "@/components/calendar/OverviewToday";
 import MeetingsTodayKpi from "@/components/calendar/MeetingsTodayKpi";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { windowAgg, decisionMakerShare } from "@/lib/linkedin/compute";
+import { getTasksData } from "@/lib/tasks/data";
+import TasksPulse from "@/components/tasks/TasksPulse";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,9 @@ export default async function OverviewPage() {
   const { metrics: li } = await getLinkedInMetrics();
   const liAgg = windowAgg(li, 365);
   const liDm = decisionMakerShare(li);
+
+  // Tasks pulse (shared team to-do list).
+  const { tasks, userId } = await getTasksData();
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
@@ -128,6 +133,21 @@ export default async function OverviewPage() {
               action={<GoogleAuthButton variant="inline" label="Connect Calendar access" />}
             />
           )}
+        </Panel>
+      </section>
+
+      {/* Tasks pulse — shared team to-do list */}
+      <section>
+        <Panel
+          title="Tasks pulse"
+          badges={
+            <>
+              <LivePill />
+              <ServiceBadge label="Team" />
+            </>
+          }
+        >
+          <TasksPulse tasks={tasks} userId={userId} />
         </Panel>
       </section>
 

@@ -56,6 +56,11 @@ export const icons: Record<string, ReactNode> = {
       <path d="M14.5 9.5a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.8-2.5 2s1.1 1.8 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2a2.5 2.5 0 0 1-2.5-1.5M12 6.5v11" />
     </svg>
   ),
+  tasks: (
+    <svg {...iconProps} aria-hidden="true">
+      <path d="m3.5 6 1.8 1.8L8.5 4.5M3.5 13l1.8 1.8 3.2-3.3M3.5 20l1.8 1.8 3.2-3.3M12.5 6.5h8M12.5 13.5h8M12.5 20.5h8" />
+    </svg>
+  ),
 };
 
 export type ModuleDef = {
@@ -85,6 +90,13 @@ export const modules: ModuleDef[] = [
     icon: icons.calendar,
     status: "live",
     service: "Google Calendar",
+  },
+  {
+    slug: "tasks",
+    name: "Tasks",
+    subtitle: "A shared to-do list for the team.",
+    icon: icons.tasks,
+    status: "live",
   },
   {
     slug: "marketing",
@@ -128,6 +140,16 @@ export const founderNav: NavItem[] = [
   { name: "Overview", href: "/dashboard", icon: icons.overview },
   { name: "Emails", href: "/dashboard/emails", icon: icons.emails, live: true },
   { name: "Calendar", href: "/dashboard/calendar", icon: icons.calendar, live: true },
+  {
+    name: "Tasks",
+    href: "/dashboard/tasks",
+    icon: icons.tasks,
+    live: true,
+    children: [
+      { name: "My tasks", href: "/dashboard/tasks?view=mine" },
+      { name: "Team board", href: "/dashboard/tasks?view=board" },
+    ],
+  },
   {
     name: "Marketing",
     href: "/dashboard/marketing",

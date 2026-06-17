@@ -32,6 +32,26 @@ export async function GET(request: Request) {
         }
       }
 
+      // Upsert this person's profile (powers the assignee dropdown + @mentions
+      // in the Tasks module). Pulled from the Google identity.
+      const u = session?.user;
+      if (u?.id) {
+        const m = (u.user_metadata ?? {}) as Record<string, string | undefined>;
+        try {
+          await supabase.from("profiles").upsert({
+            id: u.id,
+            email: u.email ?? null,
+            full_name: m.full_name ?? m.name ?? null,
+            avatar_url: m.avatar_url ?? m.picture ?? null,
+            updated_at: new Date().toISOString(),
+          });
+        } catch (e) {
+          // Table may not exist yet — don't block login.
+          // eslint-disable-next-line no-console
+          console.error("Could not upsert profile:", e);
+        }
+      }
+
       const forwardedHost = request.headers.get("x-forwarded-host");
       const isLocalEnv = process.env.NODE_ENV === "development";
       if (isLocalEnv) {
