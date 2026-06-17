@@ -4,7 +4,8 @@
       "Read(//c/c/Users/alitm/Documents/**)",
       "PowerShell(npm *)",
       "PowerShell(Move-Item *)",
-      "PowerShell(git check-ignore *)"
+      "PowerShell(git check-ignore *)",
+      "Bash(node .tmp-b.mts)"
     ]
   }
 }

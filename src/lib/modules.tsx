@@ -118,19 +118,27 @@ export function getModule(slug: string): ModuleDef | undefined {
 export type NavItem = {
   name: string;
   href?: string; // present only when clickable
-  icon: ReactNode;
+  icon?: ReactNode;
   live?: boolean; // shows a green "Live" pill
+  /** Nested items, revealed only while inside the parent's section. */
+  children?: NavItem[];
 };
 
 export const founderNav: NavItem[] = [
   { name: "Overview", href: "/dashboard", icon: icons.overview },
   { name: "Emails", href: "/dashboard/emails", icon: icons.emails, live: true },
   { name: "Calendar", href: "/dashboard/calendar", icon: icons.calendar, live: true },
+  {
+    name: "Marketing",
+    href: "/dashboard/marketing",
+    icon: icons.marketing,
+    live: true,
+    children: [{ name: "LinkedIn", href: "/dashboard/marketing/linkedin" }],
+  },
 ];
 
 /* Not clickable yet — shown shaded with a muted "Soon" pill. */
 export const comingSoonNav: NavItem[] = [
-  { name: "Marketing", icon: icons.marketing },
   { name: "Sales", icon: icons.sales },
   { name: "Orders", icon: icons.orders },
   { name: "Finance", icon: icons.finance },

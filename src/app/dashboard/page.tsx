@@ -11,6 +11,8 @@ import { getInboxView, type InboxView } from "@/lib/google/gmail";
 import { getCalendarData } from "@/lib/google/calendar";
 import OverviewToday from "@/components/calendar/OverviewToday";
 import MeetingsTodayKpi from "@/components/calendar/MeetingsTodayKpi";
+import { getLinkedInMetrics } from "@/lib/linkedin/data";
+import { windowAgg, decisionMakerShare } from "@/lib/linkedin/compute";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,11 @@ export default async function OverviewPage() {
       console.error("Calendar view failed:", e);
     }
   }
+
+  // Live Marketing/LinkedIn headline numbers (from latest export, falls back to seed).
+  const { metrics: li } = await getLinkedInMetrics();
+  const liAgg = windowAgg(li, 365);
+  const liDm = decisionMakerShare(li);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
@@ -124,11 +131,38 @@ export default async function OverviewPage() {
         </Panel>
       </section>
 
+      {/* Marketing pulse — live (LinkedIn) */}
+      <section>
+        <Panel
+          title="Marketing pulse"
+          badges={
+            <>
+              <LivePill />
+              <ServiceBadge label="LinkedIn" />
+            </>
+          }
+        >
+          <div className="py-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <MiniStat label="Audience" value={li.followersAllTime.toLocaleString("en-US")} />
+              <MiniStat label="Reach" value={liAgg.impressions.toLocaleString("en-US")} />
+              <MiniStat label="Engagement rate" value={(liAgg.engagementRate * 100).toFixed(1) + "%"} />
+              <MiniStat label="Decision-maker share" value={(liDm.pct * 100).toFixed(0) + "%"} />
+            </div>
+            <Link
+              href="/dashboard/marketing"
+              className="mt-5 inline-block text-sm font-medium text-peri-deep hover:underline"
+            >
+              View Marketing →
+            </Link>
+          </div>
+        </Panel>
+      </section>
+
       {/* Modules connecting soon */}
       <section>
         <h2 className="px-1 pb-3 text-sm font-medium text-muted">Modules connecting soon</h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <SoonTile name="Marketing" icon={icons.marketing} />
+        <div className="grid grid-cols-3 gap-4">
           <SoonTile name="Sales" icon={icons.sales} />
           <SoonTile name="Orders" icon={icons.orders} />
           <SoonTile name="Finance" icon={icons.finance} />
@@ -158,7 +192,7 @@ function KpiCard({ label, value }: { label: string; value?: number }) {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-[var(--radius-control)] bg-bg px-4 py-3">
       <span className="text-xs text-muted">{label}</span>

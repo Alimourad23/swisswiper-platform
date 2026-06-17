@@ -24,23 +24,52 @@ export default function Sidebar() {
           <SectionLabel>Founder view</SectionLabel>
           <div className="flex flex-col gap-1">
             {founderNav.map((item) => {
-              const active = pathname === item.href;
+              const active =
+                item.href === "/dashboard"
+                  ? pathname === item.href
+                  : pathname === item.href || pathname.startsWith(item.href + "/");
+              const inSection =
+                !!item.href && item.href !== "/dashboard" && pathname.startsWith(item.href);
               return (
-                <Link
-                  key={item.name}
-                  href={item.href!}
-                  aria-current={active ? "page" : undefined}
-                  className={[
-                    "flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-sm transition-colors duration-150",
-                    active
-                      ? "bg-peri-soft font-medium text-peri-deep"
-                      : "text-muted hover:bg-bg hover:text-ink",
-                  ].join(" ")}
-                >
-                  <span className="shrink-0">{item.icon}</span>
-                  <span className="flex-1">{item.name}</span>
-                  {item.live && <LivePill />}
-                </Link>
+                <div key={item.name} className="flex flex-col gap-1">
+                  <Link
+                    href={item.href!}
+                    aria-current={pathname === item.href ? "page" : undefined}
+                    className={[
+                      "flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-sm transition-colors duration-150",
+                      active
+                        ? "bg-peri-soft font-medium text-peri-deep"
+                        : "text-muted hover:bg-bg hover:text-ink",
+                    ].join(" ")}
+                  >
+                    <span className="shrink-0">{item.icon}</span>
+                    <span className="flex-1">{item.name}</span>
+                    {item.live && <LivePill />}
+                  </Link>
+
+                  {item.children && inSection && (
+                    <div className="flex flex-col gap-1 pl-9">
+                      {item.children.map((child) => {
+                        const childActive = pathname === child.href;
+                        return (
+                          <Link
+                            key={child.name}
+                            href={child.href!}
+                            aria-current={childActive ? "page" : undefined}
+                            className={[
+                              "rounded-[var(--radius-control)] px-3 py-1.5 text-[13px] transition-colors duration-150",
+                              childActive
+                                ? "bg-peri-soft font-medium text-peri-deep"
+                                : "text-muted hover:bg-bg hover:text-ink",
+                            ].join(" ")}
+                          >
+                            {child.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

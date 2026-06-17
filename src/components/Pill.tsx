@@ -32,6 +32,24 @@ export function SafePill() {
   );
 }
 
+/* Blue "Auto (from export)" tag for parsed/automatic data. */
+export function AutoTag({ label = "Auto (from export)" }: { label?: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium leading-none text-blue-600">
+      {label}
+    </span>
+  );
+}
+
+/* Amber "Manual" tag for areas the user fills in themselves. */
+export function ManualTag({ label = "Manual" }: { label?: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium leading-none text-amber-700">
+      {label}
+    </span>
+  );
+}
+
 /* Small neutral badge, e.g. "Gmail" / "Google Calendar" on a live panel. */
 export function ServiceBadge({ label }: { label: string }) {
   return (
