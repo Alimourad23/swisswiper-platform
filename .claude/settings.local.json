@@ -3,7 +3,8 @@
     "allow": [
       "Read(//c/c/Users/alitm/Documents/**)",
       "PowerShell(npm *)",
-      "PowerShell(Move-Item *)"
+      "PowerShell(Move-Item *)",
+      "PowerShell(git check-ignore *)"
     ]
   }
 }

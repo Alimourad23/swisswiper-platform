@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-const GREETING = "Good morning, Ali. Your command center is ready.";
-
-export default function AlfredOrb() {
+export default function AlfredOrb({ firstName = "Ali" }: { firstName?: string }) {
   const [speaking, setSpeaking] = useState(false);
+  const greeting = `Good morning, ${firstName}. Your command center is ready.`;
 
   // Stop any speech if the user navigates away.
   useEffect(() => {
@@ -27,7 +26,7 @@ export default function AlfredOrb() {
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(GREETING);
+    const utterance = new SpeechSynthesisUtterance(greeting);
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.onend = () => setSpeaking(false);

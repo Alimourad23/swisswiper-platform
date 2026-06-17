@@ -3,19 +3,30 @@ import AlfredOrb from "@/components/AlfredOrb";
 import ConnectState from "@/components/ConnectState";
 import { LivePill, SoonPill, ServiceBadge } from "@/components/Pill";
 import { icons } from "@/lib/modules";
+import { createClient } from "@/lib/supabase/server";
 
-export default function OverviewPage() {
+export default async function OverviewPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const meta = (user?.user_metadata ?? {}) as Record<string, string | undefined>;
+  const fullName = meta.full_name ?? meta.name ?? user?.email ?? "";
+  const firstName = fullName.split(" ")[0] || "there";
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
       {/* Hero */}
       <section className="sw-card flex flex-col items-start justify-between gap-8 px-7 py-8 sm:flex-row sm:items-center sm:px-9">
         <div>
-          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">Good morning, Ali</h1>
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+            Good morning, {firstName}
+          </h1>
           <p className="mt-2 max-w-md text-base leading-relaxed text-muted">
             Your command center. Everything that matters, in one calm place.
           </p>
         </div>
-        <AlfredOrb />
+        <AlfredOrb firstName={firstName} />
       </section>
 
       {/* KPI row — honest: no fake numbers until connected */}
