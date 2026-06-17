@@ -8,6 +8,9 @@ import { icons } from "@/lib/modules";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleAccessToken } from "@/lib/google/tokens";
 import { getInboxView, type InboxView } from "@/lib/google/gmail";
+import { getCalendarData } from "@/lib/google/calendar";
+import OverviewToday from "@/components/calendar/OverviewToday";
+import MeetingsTodayKpi from "@/components/calendar/MeetingsTodayKpi";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +26,19 @@ export default async function OverviewPage() {
   // Live Gmail view (null until Google is connected with Gmail access).
   const token = await getGoogleAccessToken();
   let gmail: InboxView | null = null;
+  let calendar: Awaited<ReturnType<typeof getCalendarData>> | null = null;
   if (token) {
     try {
       gmail = await getInboxView(token);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("Gmail view failed:", e);
+    }
+    try {
+      calendar = await getCalendarData(token);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Calendar view failed:", e);
     }
   }
 
@@ -50,7 +60,11 @@ export default async function OverviewPage() {
       {/* KPI row — honest: no fake numbers until connected */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Unread email" value={gmail?.unread} />
-        <KpiCard label="Meetings today" />
+        {calendar ? (
+          <MeetingsTodayKpi events={calendar.events} />
+        ) : (
+          <KpiCard label="Meetings today" />
+        )}
         <KpiCard label="Response time" />
         <KpiCard label="Focus hours" />
       </section>
@@ -98,11 +112,15 @@ export default async function OverviewPage() {
             </>
           }
         >
-          <ConnectState
-            icon={icons.calendar}
-            message="Connect Google Calendar to see today's agenda and your meeting load at a glance."
-            ctaLabel="Connect Calendar"
-          />
+          {calendar ? (
+            <OverviewToday events={calendar.events} />
+          ) : (
+            <ConnectState
+              icon={icons.calendar}
+              message="Connect your Google account with read-only Calendar access to see today's agenda."
+              action={<GoogleAuthButton variant="inline" label="Connect Calendar access" />}
+            />
+          )}
         </Panel>
       </section>
 
