@@ -15,6 +15,23 @@ export function SoonPill({ label = "Soon" }: { label?: string }) {
   );
 }
 
+/* Triage tags for the Emails module. */
+export function PriorityPill() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-peri-soft px-2 py-0.5 text-[11px] font-medium leading-none text-peri-deep">
+      Priority
+    </span>
+  );
+}
+
+export function SafePill() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-line px-2 py-0.5 text-[11px] font-medium leading-none text-hint">
+      Safe to delete
+    </span>
+  );
+}
+
 /* Small neutral badge, e.g. "Gmail" / "Google Calendar" on a live panel. */
 export function ServiceBadge({ label }: { label: string }) {
   return (

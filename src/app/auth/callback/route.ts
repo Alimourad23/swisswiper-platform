@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 /* Google sends the user back here with a one-time `code`.
-   We exchange it for a signed-in session, then forward to the dashboard. */
+   We exchange it for a signed-in session, capture the Google refresh token
+   (so we can call Gmail/Calendar later), then forward to the dashboard. */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -10,8 +11,27 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error) {
+      // Securely store the Google refresh token for this user (server-side only).
+      const session = data.session;
+      const refreshToken = session?.provider_refresh_token;
+      const userId = session?.user?.id;
+      if (refreshToken && userId) {
+        try {
+          await supabase.from("google_tokens").upsert({
+            user_id: userId,
+            refresh_token: refreshToken,
+            updated_at: new Date().toISOString(),
+          });
+        } catch (e) {
+          // Table may not exist yet — the UI will prompt to connect. Don't block login.
+          // eslint-disable-next-line no-console
+          console.error("Could not store Google refresh token:", e);
+        }
+      }
+
       const forwardedHost = request.headers.get("x-forwarded-host");
       const isLocalEnv = process.env.NODE_ENV === "development";
       if (isLocalEnv) {
@@ -24,6 +44,5 @@ export async function GET(request: Request) {
     }
   }
 
-  // Something went wrong — send back to sign-in with a flag.
   return NextResponse.redirect(`${origin}/?error=auth`);
 }

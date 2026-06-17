@@ -1,4 +1,4 @@
-import GoogleSignInButton from "@/components/GoogleSignInButton";
+import GoogleAuthButton from "@/components/GoogleAuthButton";
 
 export default function SignInPage() {
   return (
@@ -12,8 +12,8 @@ export default function SignInPage() {
           The performance platform. Everything that matters, in one calm place.
         </p>
 
-        {/* Real Google OAuth sign-in. */}
-        <GoogleSignInButton />
+        {/* Real Google OAuth sign-in (requests Gmail + Calendar read-only). */}
+        <GoogleAuthButton />
 
         <p className="mt-6 text-xs text-hint">Invite-only access for the SwissWiper team.</p>
       </div>

@@ -1,17 +1,20 @@
 import type { ReactNode } from "react";
 
 /* Honest "ready / connect" empty state for a live module whose data source
-   isn't wired up yet. No fabricated content. The button is a visual
-   placeholder — real connecting arrives with Google sign-in. */
+   isn't connected yet. No fabricated content.
+   - Pass `action` (a real button) when connecting is wired up.
+   - Otherwise it shows a disabled placeholder button labelled `ctaLabel`. */
 export default function ConnectState({
   icon,
   message,
   ctaLabel,
+  action,
   compact = false,
 }: {
   icon?: ReactNode;
   message: string;
-  ctaLabel: string;
+  ctaLabel?: string;
+  action?: ReactNode;
   compact?: boolean;
 }) {
   return (
@@ -27,13 +30,17 @@ export default function ConnectState({
         </div>
       )}
       <p className="max-w-sm text-sm leading-relaxed text-muted">{message}</p>
-      <button
-        type="button"
-        className="mt-5 inline-flex h-10 items-center justify-center rounded-[var(--radius-control)] bg-peri-deep px-5 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#4d5793] focus:outline-none focus-visible:ring-2 focus-visible:ring-peri-deep/40"
-      >
-        {ctaLabel}
-      </button>
-      <p className="mt-3 text-xs text-hint">Available once Google sign-in is added.</p>
+      <div className="mt-5">
+        {action ?? (
+          <button
+            type="button"
+            disabled
+            className="inline-flex h-10 cursor-default items-center justify-center rounded-[var(--radius-control)] bg-peri-deep px-5 text-sm font-medium text-white opacity-60"
+          >
+            {ctaLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
