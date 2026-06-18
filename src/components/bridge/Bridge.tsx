@@ -16,7 +16,7 @@ import { pickVoice } from "@/lib/bridge/voice";
 export default function Bridge({ data }: { data: BridgeData }) {
   const [now, setNow] = useState<number | null>(null);
   const [speaking, setSpeaking] = useState(false);
-  const [conversing, setConversing] = useState(false);
+  const [listening, setListening] = useState(false);
   const spokenRef = useRef(false);
 
   // Device-tz "now" is only known after mount — compute the briefing then.
@@ -90,7 +90,7 @@ export default function Bridge({ data }: { data: BridgeData }) {
       <StarfieldCanvas />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center">
-        <AlfredStar speaking={speaking} />
+        <AlfredStar speaking={speaking} listening={listening} />
 
         <p className="mt-4 text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/70">
           Alfred
@@ -114,7 +114,7 @@ export default function Bridge({ data }: { data: BridgeData }) {
             </p>
           )}
 
-          {!conversing && briefing && briefing.lines.length > 0 && (
+          {briefing && briefing.lines.length > 0 && (
             <ul className="mt-4 flex flex-col items-center gap-1.5">
               {briefing.lines.map((line, i) => (
                 <li
@@ -128,8 +128,8 @@ export default function Bridge({ data }: { data: BridgeData }) {
           )}
         </div>
 
-        {/* Talk to Alfred — push-to-talk; he answers in voice. */}
-        <AlfredChat onSpeakingChange={setSpeaking} onActiveChange={setConversing} />
+        {/* Talk to Alfred — push-to-talk; voice only, the star is the feedback. */}
+        <AlfredChat onSpeakingChange={setSpeaking} onListeningChange={setListening} />
 
         {/* Quiet way into the dashboard. */}
         <Link

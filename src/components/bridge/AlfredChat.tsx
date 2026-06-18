@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { speak } from "@/lib/bridge/voice";
 
-/* Push-to-talk conversation with Alfred. Tap the mic → the browser transcribes
-   speech → send it to /api/alfred/chat → speak the reply (the star intensifies
-   while he speaks). A minimal transcript shows the exchange. Errors are shown
-   quietly; nothing throws. The "Hey Alfred" wake word comes later. */
+/* Push-to-talk conversation with Alfred — VOICE ONLY. Tap the mic → the browser
+   transcribes speech → send it to /api/alfred/chat → speak the reply. The star
+   is the only feedback (listening = inward cue, speaking = outward flare); there
+   is no on-screen transcript of the exchange. The "Hey Alfred" wake word comes
+   later. */
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -29,21 +30,20 @@ type Recognition = {
 
 export default function AlfredChat({
   onSpeakingChange,
-  onActiveChange,
+  onListeningChange,
 }: {
   onSpeakingChange: (speaking: boolean) => void;
-  onActiveChange?: (active: boolean) => void;
+  onListeningChange: (listening: boolean) => void;
 }) {
+  // Conversation history is kept only to send context to the API — never shown.
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [listening, setListening] = useState(false);
   const [pending, setPending] = useState(false);
-  const [heard, setHeard] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(true);
 
   const recRef = useRef<Recognition | null>(null);
   const finalRef = useRef("");
-  const scrollRef = useRef<HTMLDivElement>(null);
   const timeZone = useRef("UTC");
 
   useEffect(() => {
@@ -59,20 +59,15 @@ export default function AlfredChat({
     if (!w.SpeechRecognition && !w.webkitSpeechRecognition) setSupported(false);
   }, []);
 
+  // Drive the star's listening cue.
   useEffect(() => {
-    onActiveChange?.(messages.length > 0);
-  }, [messages.length, onActiveChange]);
-
-  // Keep the transcript scrolled to the latest line.
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, pending]);
+    onListeningChange(listening);
+  }, [listening, onListeningChange]);
 
   const send = useCallback(
     async (text: string) => {
       const next: ChatMessage[] = [...messages, { role: "user", content: text }];
       setMessages(next);
-      setHeard("");
       setError(null);
       setPending(true);
       try {
@@ -123,13 +118,10 @@ export default function AlfredChat({
     finalRef.current = "";
 
     rec.onresult = (e) => {
-      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) finalRef.current += r[0].transcript;
-        else interim += r[0].transcript;
       }
-      setHeard((finalRef.current + " " + interim).trim());
     };
     rec.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -145,7 +137,6 @@ export default function AlfredChat({
       recRef.current = null;
       const text = finalRef.current.trim();
       if (text) void send(text);
-      else setHeard("");
     };
 
     recRef.current = rec;
@@ -167,49 +158,9 @@ export default function AlfredChat({
     startListening();
   }
 
-  const lastFew = messages.slice(-6);
-
   return (
-    <div className="mt-7 flex w-full max-w-lg flex-col items-center">
-      {/* Transcript */}
-      {(messages.length > 0 || pending) && (
-        <div
-          ref={scrollRef}
-          className="mb-4 flex max-h-[24vh] w-full flex-col gap-2 overflow-y-auto px-1 text-left"
-        >
-          {lastFew.map((m, i) => (
-            <p
-              key={i}
-              className={[
-                "text-sm font-light leading-relaxed",
-                m.role === "user" ? "text-[#aab2dd]/70" : "text-[#eef1f8]/90",
-              ].join(" ")}
-            >
-              <span className="mr-1.5 text-[11px] uppercase tracking-wider text-[#8e9ae0]/60">
-                {m.role === "user" ? "You" : "Alfred"}
-              </span>
-              {m.content}
-            </p>
-          ))}
-          {pending && (
-            <p className="text-sm font-light text-[#8e9ae0]/60">
-              <span className="mr-1.5 text-[11px] uppercase tracking-wider text-[#8e9ae0]/60">
-                Alfred
-              </span>
-              <span className="sw-thinking-dots">thinking</span>
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Live transcription while listening */}
-      {listening && (
-        <p className="mb-3 min-h-5 text-sm font-light italic text-[#cad1e8]/80">
-          {heard || "Listening…"}
-        </p>
-      )}
-
-      {/* Mic control */}
+    <div className="mt-8 flex w-full flex-col items-center">
+      {/* Mic control — the star carries all the conversational feedback. */}
       <button
         type="button"
         onClick={toggleMic}
@@ -238,9 +189,9 @@ export default function AlfredChat({
           : error
             ? ""
             : listening
-              ? "Tap to stop"
+              ? "Listening… tap to stop"
               : pending
-                ? "Alfred is thinking…"
+                ? "One moment…"
                 : "Tap to talk to Alfred"}
       </p>
       {error && <p className="mt-1 text-xs font-light text-[#e6a3a3]/90">{error}</p>}

@@ -6,17 +6,32 @@ import { useEffect, useRef } from "react";
    driven by requestAnimationFrame (so it ALWAYS animates, smoothly, regardless
    of CSS keyframe quirks in production).
 
-   Always alive: rays counter-rotate, the core breathes + flickers, the corona
-   pulses outward, the glow swells gently. When `speaking` is true the whole
-   star intensifies (rays extend + spin faster, core flares brighter/faster,
-   corona quickens, glow swells) — the intensity `k` eases in/out over ~0.7s. */
-export default function AlfredStar({ speaking }: { speaking: boolean }) {
+   Three states, all driven from the canvas loop:
+   • IDLE — a steady gentle burn (rays counter-rotate, core breathes + flickers,
+     corona pulses outward, glow swells gently).
+   • SPEAKING — the big outward flare: rays extend + spin faster, core flares
+     brighter/faster, corona quickens, glow swells. Intensity `k` eases ~0.7s.
+   • LISTENING — a distinct, subtler inward cue: the star draws in (rays retract
+     slightly, glow + core cool a touch) and quiet rings contract toward the
+     core — clearly different from the outward speaking flare. `l` eases ~0.5s. */
+export default function AlfredStar({
+  speaking,
+  listening = false,
+}: {
+  speaking: boolean;
+  listening?: boolean;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const target = useRef(0);
+  const targetListen = useRef(0);
 
   useEffect(() => {
     target.current = speaking ? 1 : 0;
   }, [speaking]);
+
+  useEffect(() => {
+    targetListen.current = listening ? 1 : 0;
+  }, [listening]);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -28,7 +43,8 @@ export default function AlfredStar({ speaking }: { speaking: boolean }) {
     let size = 0;
     let dpr = 1;
     let R = 0;
-    let k = 0; // current intensity, eased toward target
+    let k = 0; // speaking intensity, eased toward target
+    let l = 0; // listening intensity, eased toward targetListen
     let angA = 0;
     let angB = 0;
 
@@ -83,7 +99,7 @@ export default function AlfredStar({ speaking }: { speaking: boolean }) {
       for (let i = 0; i < count; i++) {
         const a = baseAng + (i / count) * Math.PI * 2;
         const shimmer = 0.62 + 0.38 * Math.sin(a * 3 + t * 0.004 + i);
-        ctx.globalAlpha = Math.min(1, (0.5 + 0.5 * k) * shimmer);
+        ctx.globalAlpha = Math.min(1, (0.5 + 0.5 * k) * (1 - 0.28 * l) * shimmer);
         ctx.save();
         ctx.rotate(a);
         ctx.beginPath();
@@ -101,27 +117,31 @@ export default function AlfredStar({ speaking }: { speaking: boolean }) {
       const dt = Math.min(50, t - last);
       last = t;
 
-      // Ease intensity toward target — time constant ~150ms ≈ 0.7s settle.
+      // Ease intensities toward their targets (speaking ~0.7s, listening ~0.5s).
       k += (target.current - k) * (1 - Math.exp(-dt / 150));
+      l += (targetListen.current - l) * (1 - Math.exp(-dt / 110));
 
       ctx.clearRect(0, 0, size, size);
       ctx.save();
       ctx.translate(R, R);
       ctx.globalCompositeOperation = "lighter"; // additive — luminous bloom
 
-      // Organic core flicker (sum of sines).
+      // Organic core flicker (sum of sines). Listening cools + steadies it
+      // (dimmer, less jitter) — distinct from the speaking flare.
       const flick =
-        0.9 +
-        0.06 * Math.sin(t * 0.02) +
-        0.04 * Math.sin(t * 0.013 + 1.3) +
-        k * (0.12 + 0.06 * Math.sin(t * 0.05));
-      const coreScale = (1 + 0.025 * Math.sin(t * 0.006)) * (1 + 0.06 * k);
+        (0.9 +
+          0.06 * Math.sin(t * 0.02) +
+          0.04 * Math.sin(t * 0.013 + 1.3) +
+          k * (0.12 + 0.06 * Math.sin(t * 0.05))) *
+        (1 - 0.16 * l);
+      // Listening gently contracts the core; speaking expands it.
+      const coreScale = (1 + 0.025 * Math.sin(t * 0.006)) * (1 + 0.06 * k) * (1 - 0.06 * l);
 
-      // ── Outer glow — deep, rich, swells on speaking ──────────────────
+      // ── Outer glow — deep, rich, swells on speaking, cools on listening ─
       // Radius stays ≤ R (fully fades inside the canvas, no square edge);
       // the "swell" comes from intensity, not from growing past the bounds.
       const glowR = R * 0.96;
-      const gi = 0.6 + 0.35 * k;
+      const gi = (0.6 + 0.35 * k) * (1 - 0.22 * l);
       const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
       glow.addColorStop(0, `rgba(122,130,192,${0.6 * gi})`);
       glow.addColorStop(0.32, `rgba(92,102,166,${0.46 * gi})`);
@@ -132,24 +152,41 @@ export default function AlfredStar({ speaking }: { speaking: boolean }) {
       ctx.arc(0, 0, glowR, 0, Math.PI * 2);
       ctx.fill();
 
-      // ── Corona rings pulsing outward ─────────────────────────────────
+      // ── Corona rings pulsing outward (recede a little while listening) ─
       const period = 4200 * (1 - 0.45 * k);
       const rings = 3;
       ctx.lineWidth = 1.2;
       for (let i = 0; i < rings; i++) {
         const phase = (t / period + i / rings) % 1;
         const rr = R * (0.3 + phase * 0.64);
-        const alpha = (1 - phase) * 0.5 * (0.7 + 0.5 * k);
+        const alpha = (1 - phase) * 0.5 * (0.7 + 0.5 * k) * (1 - 0.55 * l);
         ctx.strokeStyle = `rgba(202,209,232,${alpha})`;
         ctx.beginPath();
         ctx.arc(0, 0, rr, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // ── Rays — counter-rotating, extend on speaking ──────────────────
+      // ── Listening cue — quiet rings contracting INWARD toward the core,
+      // the opposite of the corona. A soft, attentive inward pulse. ──────
+      if (l > 0.01) {
+        const inPeriod = 2400;
+        const inRings = 2;
+        ctx.lineWidth = 1.4;
+        for (let i = 0; i < inRings; i++) {
+          const phase = (t / inPeriod + i / inRings) % 1;
+          const rr = R * (0.86 - phase * 0.54); // large → small
+          const alpha = Math.sin(phase * Math.PI) * 0.5 * l; // fade in then out
+          ctx.strokeStyle = `rgba(180,190,232,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(0, 0, Math.max(0, rr), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      // ── Rays — counter-rotating, extend on speaking, retract on listening ─
       angA += dt * 0.00017 * (1 + 1.4 * k);
       angB -= dt * 0.00021 * (1 + 1.4 * k);
-      const ext = 1 + 0.18 * k;
+      const ext = (1 + 0.18 * k) * (1 - 0.09 * l);
       if (gradLong && gradShort) {
         ctx.save();
         ctx.scale(ext, ext); // grows geometry + gradient together
