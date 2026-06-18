@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AlfredStar from "@/components/bridge/AlfredStar";
+import StarfieldCanvas from "@/components/bridge/StarfieldCanvas";
 import { composeBriefing, type BridgeData } from "@/lib/bridge/briefing";
 
 /* THE BRIDGE — the post-login welcome. A calm deep-space canvas that is just
    Alfred, a living star, who greets the user by name and speaks a live briefing
-   aloud automatically (no buttons), then offers a quiet way into the dashboard. */
+   aloud automatically (no buttons), then offers a quiet way into the dashboard.
+   Everything fits one viewport — no scrolling. */
 
 export default function Bridge({ data }: { data: BridgeData }) {
   const [now, setNow] = useState<number | null>(null);
@@ -79,59 +81,42 @@ export default function Bridge({ data }: { data: BridgeData }) {
     };
   }, [briefing]);
 
-  const stars = useStarfield();
-
   return (
-    <main className="relative min-h-dvh w-full overflow-hidden bg-[#06070F] text-[#eef1f8]">
-      {/* Drifting, twinkling periwinkle starfield */}
-      <div className="sw-starfield">
-        {stars.map((s, i) => (
-          <span
-            key={i}
-            className="sw-star-dot"
-            style={{
-              left: `${s.x}%`,
-              top: `${s.y}%`,
-              width: s.size,
-              height: s.size,
-              animationDelay: `${s.delay}s`,
-              animationDuration: `${s.dur}s`,
-            }}
-          />
-        ))}
-      </div>
+    <main className="relative h-[100dvh] w-full overflow-hidden bg-[#06070F] text-[#eef1f8]">
+      {/* Drifting, twinkling periwinkle starfield (canvas, always animating) */}
+      <StarfieldCanvas />
 
-      <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-6 py-20 text-center">
+      <div className="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center">
         <AlfredStar speaking={speaking} />
 
-        <p className="mt-10 text-[11px] font-medium uppercase tracking-[0.32em] text-[#8e9ae0]/70">
+        <p className="mt-4 text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/70">
           Alfred
         </p>
 
-        {/* Greeting + briefing — typeset light, with lots of space. Fades in
-            once the device-tz briefing is ready. */}
+        {/* Greeting + briefing — typeset light, fades in once the device-tz
+            briefing is ready. */}
         <div
           className={[
-            "mt-5 flex max-w-xl flex-col items-center transition-opacity duration-700",
+            "mt-2 flex max-w-xl flex-col items-center transition-opacity duration-700",
             briefing ? "opacity-100" : "opacity-0",
           ].join(" ")}
         >
-          <h1 className="text-3xl font-light tracking-tight text-white sm:text-4xl">
-            {briefing?.greeting ?? " "}
+          <h1 className="text-2xl font-light tracking-tight text-white sm:text-3xl">
+            {briefing?.greeting ?? " "}
           </h1>
 
           {briefing && (
-            <p className="mt-4 text-base font-light leading-relaxed text-[#cad1e8]/85">
+            <p className="mt-2.5 text-sm font-light leading-relaxed text-[#cad1e8]/85 sm:text-base">
               {briefing.synthesis}
             </p>
           )}
 
           {briefing && briefing.lines.length > 0 && (
-            <ul className="mt-8 flex flex-col items-center gap-3">
+            <ul className="mt-4 flex flex-col items-center gap-1.5">
               {briefing.lines.map((line, i) => (
                 <li
                   key={i}
-                  className="text-sm font-light leading-relaxed tracking-wide text-[#aab2dd]/80"
+                  className="text-xs font-light leading-relaxed tracking-wide text-[#aab2dd]/80 sm:text-sm"
                 >
                   {line}
                 </li>
@@ -143,7 +128,7 @@ export default function Bridge({ data }: { data: BridgeData }) {
         {/* Quiet way into the dashboard. */}
         <Link
           href="/dashboard/overview"
-          className="group mt-14 inline-flex items-center gap-2 rounded-full border border-[#8e9ae0]/25 px-6 py-2.5 text-sm font-light tracking-wide text-[#cad1e8] transition-colors duration-300 hover:border-[#8e9ae0]/55 hover:bg-white/[0.04] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8e9ae0]/40"
+          className="group mt-8 inline-flex items-center gap-2 rounded-full border border-[#8e9ae0]/25 px-6 py-2.5 text-sm font-light tracking-wide text-[#cad1e8] transition-colors duration-300 hover:border-[#8e9ae0]/55 hover:bg-white/[0.04] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8e9ae0]/40"
         >
           Enter dashboard
           <svg
@@ -174,36 +159,4 @@ function pickVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
     voices.find((v) => /^en/i.test(v.lang)) ||
     voices[0]
   );
-}
-
-/* A deterministic starfield (seeded) so server and client render identically —
-   no hydration mismatch, no Math.random at render time. */
-type Star = { x: number; y: number; size: number; delay: number; dur: number };
-
-function useStarfield(): Star[] {
-  return useMemo(() => {
-    const rand = lcg(0x53571ce); // fixed seed
-    return Array.from({ length: 70 }, () => {
-      const size = 1 + Math.round(rand() * 2);
-      return {
-        x: rand() * 100,
-        y: rand() * 100,
-        size,
-        delay: rand() * 6,
-        dur: 4 + rand() * 6,
-      };
-    });
-  }, []);
-}
-
-/* Tiny seeded PRNG (mulberry32). */
-function lcg(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
