@@ -137,7 +137,7 @@ export type NavItem = {
 };
 
 export const founderNav: NavItem[] = [
-  { name: "Overview", href: "/dashboard", icon: icons.overview },
+  { name: "Overview", href: "/dashboard/overview", icon: icons.overview },
   { name: "Emails", href: "/dashboard/emails", icon: icons.emails, live: true },
   { name: "Calendar", href: "/dashboard/calendar", icon: icons.calendar, live: true },
   {

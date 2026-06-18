@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /* Runs on every matched request (from src/proxy.ts):
    1. Refreshes the Supabase session cookie so logins don't silently expire.
-   2. Protects /dashboard — signed-out visitors are sent to the sign-in page. */
+   2. Protects /dashboard and /bridge — signed-out visitors are sent to the
+      sign-in page. */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -31,8 +32,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect the dashboard and all its sub-pages.
-  if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
+  // Protect the dashboard, the Bridge and all their sub-pages.
+  const path = request.nextUrl.pathname;
+  if (!user && (path.startsWith("/dashboard") || path.startsWith("/bridge"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
