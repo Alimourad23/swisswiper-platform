@@ -12,8 +12,16 @@ create table if not exists public.profiles (
   email       text,
   full_name   text,
   avatar_url  text,
+  role        text not null default 'member' check (role in ('member','founder')),
   updated_at  timestamptz default now()
 );
+
+-- For existing installs (table already created without the column).
+alter table public.profiles
+  add column if not exists role text not null default 'member';
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles
+  add constraint profiles_role_check check (role in ('member','founder'));
 
 alter table public.profiles enable row level security;
 
@@ -37,13 +45,18 @@ create table if not exists public.tasks (
   status        text not null default 'todo'   check (status in ('todo','in_progress','done')),
   priority      text not null default 'normal' check (priority in ('low','normal','high')),
   due_at        timestamptz,
-  visibility    text not null default 'team'   check (visibility in ('team','personal')),
+  visibility    text not null default 'team'   check (visibility in ('team','personal','founders')),
   tags          text[] not null default '{}',
   created_by    uuid not null references auth.users(id) on delete cascade,
   created_at    timestamptz default now(),
   updated_at    timestamptz default now(),
   completed_at  timestamptz
 );
+
+-- For existing installs: widen the visibility check to allow 'founders'.
+alter table public.tasks drop constraint if exists tasks_visibility_check;
+alter table public.tasks
+  add constraint tasks_visibility_check check (visibility in ('team','personal','founders'));
 
 alter table public.tasks enable row level security;
 
@@ -81,13 +94,24 @@ create policy task_assignees_delete on public.task_assignees
     )
   );
 
--- tasks policies (now that task_assignees exists)
+-- tasks policies (now that task_assignees exists).
+-- team/personal: normal creator/assignee rules. founders: visible/editable
+-- only by role='founder' (the EXISTS hits profiles, whose SELECT policy is
+-- "true", so this is NOT recursive).
 drop policy if exists tasks_select on public.tasks;
 create policy tasks_select on public.tasks
   for select to authenticated using (
-    visibility = 'team'
-    or created_by = auth.uid()
-    or auth.uid() in (select user_id from public.task_assignees where task_id = tasks.id)
+    (
+      visibility <> 'founders' and (
+        visibility = 'team'
+        or created_by = auth.uid()
+        or auth.uid() in (select user_id from public.task_assignees where task_id = tasks.id)
+      )
+    )
+    or (
+      visibility = 'founders'
+      and exists (select 1 from public.profiles where id = auth.uid() and role = 'founder')
+    )
   );
 
 drop policy if exists tasks_insert on public.tasks;
@@ -95,16 +119,33 @@ create policy tasks_insert on public.tasks
   for insert to authenticated with check (created_by = auth.uid());
 
 -- Team tasks: any signed-in user may edit. Personal tasks: creator or assignee.
+-- Founders tasks: founders only.
 drop policy if exists tasks_update on public.tasks;
 create policy tasks_update on public.tasks
   for update to authenticated using (
-    visibility = 'team'
-    or created_by = auth.uid()
-    or auth.uid() in (select user_id from public.task_assignees where task_id = tasks.id)
+    (
+      visibility <> 'founders' and (
+        visibility = 'team'
+        or created_by = auth.uid()
+        or auth.uid() in (select user_id from public.task_assignees where task_id = tasks.id)
+      )
+    )
+    or (
+      visibility = 'founders'
+      and exists (select 1 from public.profiles where id = auth.uid() and role = 'founder')
+    )
   ) with check (
-    visibility = 'team'
-    or created_by = auth.uid()
-    or auth.uid() in (select user_id from public.task_assignees where task_id = tasks.id)
+    (
+      visibility <> 'founders' and (
+        visibility = 'team'
+        or created_by = auth.uid()
+        or auth.uid() in (select user_id from public.task_assignees where task_id = tasks.id)
+      )
+    )
+    or (
+      visibility = 'founders'
+      and exists (select 1 from public.profiles where id = auth.uid() and role = 'founder')
+    )
   );
 
 drop policy if exists tasks_delete on public.tasks;

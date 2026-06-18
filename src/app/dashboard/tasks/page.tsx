@@ -12,7 +12,7 @@ export default async function TasksPage({
 }) {
   const m = getModule("tasks")!;
   const { view, task } = await searchParams;
-  const { tasks, profiles, userId } = await getTasksData();
+  const { tasks, profiles, userId, userRole } = await getTasksData();
 
   // The sidebar children map to these views:
   //   ?view=mine  → "My tasks" (list, scoped to me)
@@ -33,6 +33,7 @@ export default async function TasksPage({
         initialTasks={tasks}
         profiles={profiles}
         userId={userId}
+        userRole={userRole}
         initialView={initialView}
         initialScope={initialScope}
         initialOpenId={task ?? null}

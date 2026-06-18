@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Profile, Task } from "@/lib/tasks/types";
+import type { Profile, Task, TaskRole } from "@/lib/tasks/types";
 
 export type TasksData = {
   tasks: Task[];
   profiles: Profile[];
   userId: string | null;
+  /** The signed-in user's role — gates the "Founders" visibility option. */
+  userRole: TaskRole;
 };
 
 /* The ONE function the UI calls to load tasks. Swapping the source later must
@@ -16,12 +18,16 @@ export async function getTasksData(): Promise<TasksData> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { tasks: [], profiles: [], userId: null };
+  if (!user) return { tasks: [], profiles: [], userId: null, userRole: "member" };
 
-  const [{ data: taskRows }, { data: profileRows }] = await Promise.all([
+  const [{ data: taskRows }, { data: profileRows }, { data: myProfile }] = await Promise.all([
     supabase.from("tasks").select("*").order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, email, full_name, avatar_url"),
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
   ]);
+
+  const userRole: TaskRole =
+    (myProfile as { role?: string } | null)?.role === "founder" ? "founder" : "member";
 
   const baseTasks = (taskRows ?? []) as Omit<Task, "assignees">[];
 
@@ -45,5 +51,5 @@ export async function getTasksData(): Promise<TasksData> {
     assignees: byTask.get(t.id) ?? [],
   }));
 
-  return { tasks, profiles: (profileRows ?? []) as Profile[], userId: user.id };
+  return { tasks, profiles: (profileRows ?? []) as Profile[], userId: user.id, userRole };
 }

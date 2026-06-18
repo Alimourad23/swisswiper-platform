@@ -34,6 +34,12 @@ export async function GET(request: Request) {
 
       // Upsert this person's profile (powers the assignee dropdown + @mentions
       // in the Tasks module). Pulled from the Google identity.
+      //
+      // IMPORTANT: `role` is deliberately NOT in this payload. An upsert only
+      // updates the columns it sends, so on first sign-in `role` takes its DB
+      // default ('member') and on every later sign-in the existing value is
+      // preserved. Never add `role` here — that would reset founders to
+      // 'member' on each login.
       const u = session?.user;
       if (u?.id) {
         const m = (u.user_metadata ?? {}) as Record<string, string | undefined>;

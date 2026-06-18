@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile, Task, TaskPriority, TaskStatus } from "@/lib/tasks/types";
+import type { Profile, Task, TaskPriority, TaskRole, TaskStatus } from "@/lib/tasks/types";
 import { STATUS_COLUMNS } from "@/lib/tasks/types";
 import {
   dueLabel,
@@ -26,6 +26,7 @@ export default function TasksBoard({
   initialTasks,
   profiles,
   userId,
+  userRole = "member",
   initialView = "list",
   initialScope = "all",
   initialOpenId = null,
@@ -33,6 +34,7 @@ export default function TasksBoard({
   initialTasks: Task[];
   profiles: Profile[];
   userId: string | null;
+  userRole?: TaskRole;
   initialView?: View;
   initialScope?: Scope;
   initialOpenId?: string | null;
@@ -158,7 +160,7 @@ export default function TasksBoard({
 
   return (
     <div className="flex flex-col gap-5">
-      <QuickAdd profiles={profiles} />
+      <QuickAdd profiles={profiles} userRole={userRole} />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
@@ -318,6 +320,7 @@ export default function TasksBoard({
           task={openTask}
           profiles={profiles}
           userId={userId}
+          userRole={userRole}
           onClose={() => setOpenId(null)}
         />
       )}
@@ -376,6 +379,14 @@ function Badges({ task }: { task: Task }) {
       {task.visibility === "personal" && (
         <span className="rounded-full bg-line px-2 py-0.5 text-[11px] font-medium leading-none text-hint">
           Personal
+        </span>
+      )}
+      {task.visibility === "founders" && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-peri-deep px-2 py-0.5 text-[11px] font-medium leading-none text-white">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7l4 5 5-7 5 7 4-5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          </svg>
+          Founders
         </span>
       )}
       {task.tags.map((t) => (
@@ -492,7 +503,7 @@ function TaskCard({
           {task.title}
         </span>
       </div>
-      {(task.tags.length > 0 || task.visibility === "personal") && (
+      {(task.tags.length > 0 || task.visibility !== "team") && (
         <div className="flex flex-wrap items-center gap-1.5">
           <Badges task={task} />
         </div>

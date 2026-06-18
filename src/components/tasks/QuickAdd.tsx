@@ -1,18 +1,27 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Profile } from "@/lib/tasks/types";
+import type { Profile, TaskRole, TaskVisibility } from "@/lib/tasks/types";
 import { createTask } from "@/lib/tasks/actions";
 import { dateInputToIso } from "@/lib/tasks/format";
 import AssigneeSelect from "@/components/tasks/AssigneeSelect";
 import CategoryPicker from "@/components/tasks/CategoryPicker";
+import VisibilitySelect from "@/components/tasks/VisibilitySelect";
 
 /* The quick-add bar: title + assignee + optional due date. Enter creates the
-   task with sensible defaults (team / todo / normal). */
-export default function QuickAdd({ profiles }: { profiles: Profile[] }) {
+   task with sensible defaults (team / todo / normal). Founders also get the
+   "Founders" visibility option. */
+export default function QuickAdd({
+  profiles,
+  userRole = "member",
+}: {
+  profiles: Profile[];
+  userRole?: TaskRole;
+}) {
   const [title, setTitle] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
+  const [visibility, setVisibility] = useState<TaskVisibility>("team");
   const [due, setDue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -26,12 +35,14 @@ export default function QuickAdd({ profiles }: { profiles: Profile[] }) {
         title: t,
         assigneeIds: assignees,
         tags,
+        visibility,
         dueAt: dateInputToIso(due),
       });
       if (res.ok) {
         setTitle("");
         setAssignees([]);
         setTags([]);
+        setVisibility("team");
         setDue("");
       } else {
         setError(res.error);
@@ -66,6 +77,7 @@ export default function QuickAdd({ profiles }: { profiles: Profile[] }) {
             compact
           />
           <CategoryPicker value={tags} onChange={setTags} variant="popover" />
+          <VisibilitySelect value={visibility} onChange={setVisibility} userRole={userRole} />
           <input
             type="date"
             value={due}

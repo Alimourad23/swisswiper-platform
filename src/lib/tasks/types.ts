@@ -3,7 +3,10 @@
 
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "normal" | "high";
-export type TaskVisibility = "team" | "personal";
+export type TaskVisibility = "team" | "personal" | "founders";
+
+/* Who someone is on the team. 'founder' unlocks founders-only tasks. */
+export type TaskRole = "member" | "founder";
 
 export type Profile = {
   id: string;

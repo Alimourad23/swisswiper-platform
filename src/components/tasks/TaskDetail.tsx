@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import type { Profile, Task, TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
+import type { Profile, Task, TaskPriority, TaskRole, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
 import { STATUS_COLUMNS, PRIORITY_LABEL } from "@/lib/tasks/types";
 import {
   addAssignee,
@@ -15,6 +15,7 @@ import Avatar from "@/components/tasks/Avatar";
 import AssigneeSelect from "@/components/tasks/AssigneeSelect";
 import CategoryPicker from "@/components/tasks/CategoryPicker";
 import MentionTextarea from "@/components/tasks/MentionTextarea";
+import VisibilitySelect from "@/components/tasks/VisibilitySelect";
 
 /* Slide-over panel to view & edit a single task. Field edits are saved with
    the "Save changes" button; status and assignees apply immediately because
@@ -23,11 +24,13 @@ export default function TaskDetail({
   task,
   profiles,
   userId,
+  userRole = "member",
   onClose,
 }: {
   task: Task;
   profiles: Profile[];
   userId: string | null;
+  userRole?: TaskRole;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(task.title);
@@ -217,14 +220,12 @@ export default function TaskDetail({
           </div>
 
           <Field label="Visibility">
-            <select
+            <VisibilitySelect
               value={visibility}
-              onChange={(e) => setVisibility(e.target.value as TaskVisibility)}
-              className="w-full rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-peri"
-            >
-              <option value="team">Team</option>
-              <option value="personal">Personal</option>
-            </select>
+              onChange={setVisibility}
+              userRole={userRole}
+              className="w-full px-3 text-ink"
+            />
           </Field>
 
           <div className="flex flex-col gap-2">
