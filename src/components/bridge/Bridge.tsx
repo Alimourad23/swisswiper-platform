@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AlfredStar from "@/components/bridge/AlfredStar";
 import StarfieldCanvas from "@/components/bridge/StarfieldCanvas";
+import AlfredChat from "@/components/bridge/AlfredChat";
 import { composeBriefing, type BridgeData } from "@/lib/bridge/briefing";
+import { pickVoice } from "@/lib/bridge/voice";
 
 /* THE BRIDGE — the post-login welcome. A calm deep-space canvas that is just
    Alfred, a living star, who greets the user by name and speaks a live briefing
@@ -14,6 +16,7 @@ import { composeBriefing, type BridgeData } from "@/lib/bridge/briefing";
 export default function Bridge({ data }: { data: BridgeData }) {
   const [now, setNow] = useState<number | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  const [conversing, setConversing] = useState(false);
   const spokenRef = useRef(false);
 
   // Device-tz "now" is only known after mount — compute the briefing then.
@@ -111,7 +114,7 @@ export default function Bridge({ data }: { data: BridgeData }) {
             </p>
           )}
 
-          {briefing && briefing.lines.length > 0 && (
+          {!conversing && briefing && briefing.lines.length > 0 && (
             <ul className="mt-4 flex flex-col items-center gap-1.5">
               {briefing.lines.map((line, i) => (
                 <li
@@ -124,6 +127,9 @@ export default function Bridge({ data }: { data: BridgeData }) {
             </ul>
           )}
         </div>
+
+        {/* Talk to Alfred — push-to-talk; he answers in voice. */}
+        <AlfredChat onSpeakingChange={setSpeaking} onActiveChange={setConversing} />
 
         {/* Quiet way into the dashboard. */}
         <Link
@@ -147,16 +153,5 @@ export default function Bridge({ data }: { data: BridgeData }) {
         </Link>
       </div>
     </main>
-  );
-}
-
-/* Prefer an en-GB browser voice, then any English, then whatever's default. */
-function pickVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
-  const voices = synth.getVoices();
-  if (!voices.length) return null;
-  return (
-    voices.find((v) => /en[-_]GB/i.test(v.lang)) ||
-    voices.find((v) => /^en/i.test(v.lang)) ||
-    voices[0]
   );
 }
