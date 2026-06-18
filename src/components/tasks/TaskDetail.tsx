@@ -62,6 +62,10 @@ export default function TaskDetail({
 
   const isCreator = userId === task.created_by;
   const byId = new Map(profiles.map((p) => [p.id, p]));
+  const creator = byId.get(task.created_by);
+  const creatorName = creator
+    ? displayName(creator.full_name, creator.email)
+    : "Someone";
 
   function save() {
     setError(null);
@@ -147,6 +151,15 @@ export default function TaskDetail({
         </div>
 
         <div className="flex flex-1 flex-col gap-5 px-6 py-5">
+          {/* Who assigned / created this — so the recipient sees it in-app. */}
+          <div className="flex items-center gap-2 text-xs text-hint">
+            <Avatar profile={creator} />
+            <span>
+              Created by <span className="font-medium text-muted">{creatorName}</span>
+              {isCreator && " (you)"}
+            </span>
+          </div>
+
           <Field label="Title">
             <input
               value={title}
