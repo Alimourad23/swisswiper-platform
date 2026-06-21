@@ -13,11 +13,13 @@ import TaskReview, { type TaskDraft } from "@/components/bridge/TaskReview";
 import EmailReview, { type EmailDraftState } from "@/components/bridge/EmailReview";
 import EventReview, { type EventDraftState } from "@/components/bridge/EventReview";
 
-/* Push-to-talk conversation with Alfred — VOICE ONLY. Every proposal opens ONE
-   consistent review panel (wide card + on-screen options + spoken choices).
-   Options are available as buttons AND voice; a "Revise" intent on any panel
-   re-opens the conversation so Alfred adjusts the proposal in place. Nothing
-   changes data without an explicit confirmation. */
+/* Push-to-talk → CONTINUOUS conversation with Alfred. Once you start, the mic
+   keeps listening across turns (Alfred resumes after each reply) until you say
+   "that's all" (or dismiss / Esc). Voice is conversational: while a review panel
+   is open, anything that isn't a clear Send/Save/Create/Confirm/Cancel is sent
+   to the brain to interpret — usually an edit ("make it friendlier", "due
+   Monday") that Alfred applies and re-presents in place. Buttons stay as the
+   reliable fallback. Nothing changes data without an explicit confirmation. */
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ActionCall = { id: string; name: string; input: Record<string, unknown> };
@@ -43,13 +45,15 @@ const NAV: Record<string, string> = {
   bridge: "/bridge",
 };
 
-const YES = /\b(yes|yeah|yep|yup|confirm|create|create it|go ahead|please|sure|affirmative|correct|aye|ok|okay)\b/;
-const NO = /\b(no|nope|nah|cancel|don'?t|stop|never\s?mind|negative|leave it|discard)\b/;
+// Clear, short voice commands. Free-form utterances (anything else) go to the brain.
+const CANCEL = /\b(cancel|never\s?mind|discard|forget it|leave it|scrap it|nope|^no$)\b/;
+const NO_BARE = /^(no|nope|nah)\b/;
 const SEND = /\b(send it|send now|send|fire it off)\b/;
-const SAVE = /\b(save (draft|it|as draft)?|draft it|just draft|keep it as a draft)\b/;
-const REVISE = /\b(revise|redraft|re-?draft|rewrite|re-?write|redo|re-?do|not quite|amend|adjust|tweak|change (it|that|this)|edit it|make changes?)\b/;
+const SAVE = /\b(save (it|draft|as draft)?|draft it|just draft|keep (it )?as a draft)\b/;
+const AFFIRM = /\b(yes|yeah|yep|yup|confirm|create it|create|go ahead|do it|sure|ok|okay|perfect|looks good|sounds good|that'?s right|aye)\b/;
+const REVISE_WORD = /\b(revise|redraft|re-?draft|rewrite|re-?write|redo|re-?do|not quite)\b/;
 const DISMISS =
-  /\b(that'?s all|that'?ll be all|that is all|dismiss|go away|goodbye|good bye|thank you alfred|thanks alfred|nothing else|that'?s it)\b/;
+  /\b(that'?s all|that'?ll be all|that is all|dismiss|go away|goodbye|good bye|thank you alfred|thanks alfred|nothing else)\b/;
 
 type RecognitionResult = { isFinal: boolean; 0: { transcript: string } };
 type RecognitionEvent = { resultIndex: number; results: ArrayLike<RecognitionResult> };
@@ -77,8 +81,6 @@ export default function AlfredChat({
 }: {
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
-  /** Fires whenever a review/confirm panel opens or closes (parent hides the
-   *  greeting/briefing while one is open). */
   onPanelOpenChange?: (open: boolean) => void;
   active?: boolean;
   onDismiss?: () => void;
@@ -92,7 +94,6 @@ export default function AlfredChat({
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(true);
 
-  // One interactive panel at a time.
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [taskDraft, setTaskDraft] = useState<TaskDraft | null>(null);
   const [emailDraft, setEmailDraft] = useState<EmailDraftState | null>(null);
@@ -107,8 +108,17 @@ export default function AlfredChat({
   const emailRefState = useRef<EmailDraftState | null>(null);
   const eventRefState = useRef<EventDraftState | null>(null);
   const rosterRef = useRef<Person[]>([]);
-  const revisingRef = useRef(false);
   const timeZone = useRef("UTC");
+  const activeRef = useRef(active);
+  const conversingRef = useRef(false); // in a hands-free conversation
+  const stoppingRef = useRef(false); // suppress the next onend auto-continue
+
+  // "Latest" refs so the recognizer's handlers (created in an earlier render)
+  // always call the current closures — avoids stale conversation history.
+  const sendRef = useRef<((t: string) => void) | null>(null);
+  const resolveByVoiceRef = useRef<((t: string) => void) | null>(null);
+  const endConversationRef = useRef<(() => void) | null>(null);
+  const startListeningRef = useRef<(() => void) | null>(null);
 
   const panelOpen = !!(taskDraft || emailDraft || eventDraft || confirm);
 
@@ -132,6 +142,9 @@ export default function AlfredChat({
 
   useEffect(() => onListeningChange(listening), [listening, onListeningChange]);
   useEffect(() => onPanelOpenChange?.(panelOpen), [panelOpen, onPanelOpenChange]);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
 
   const addAssistant = useCallback((text: string) => {
     if (text) setMessages((m) => [...m, { role: "assistant", content: text }]);
@@ -165,8 +178,26 @@ export default function AlfredChat({
     setConfirm(null);
   }, []);
 
+  // Resume the mic after Alfred speaks (the hands-free loop).
+  const resumeListening = useCallback(() => {
+    if (activeRef.current && !recRef.current && (conversingRef.current || hasPending())) {
+      startListeningRef.current?.();
+    }
+  }, [hasPending]);
+
+  // Intentional stop (before an action) — suppress the auto-continue.
+  const stopRecForAction = useCallback(() => {
+    if (recRef.current) {
+      stoppingRef.current = true;
+      recRef.current.abort();
+    }
+  }, []);
+
+  /* ── Brain turn ───────────────────────────────────────────────────────── */
+
   const send = useCallback(
     async (text: string) => {
+      const hadPending = hasPending();
       const next: ChatMessage[] = [...messages, { role: "user", content: text }];
       setMessages(next);
       setError(null);
@@ -187,6 +218,7 @@ export default function AlfredChat({
 
         const actions = data.actions ?? [];
         const dir: Directory = data.directory ?? { profiles: [], openTasks: [], emails: [], events: [] };
+        const modelText = (data.reply ?? "").trim();
 
         const nav = actions.find((a) => a.name === "navigate");
         if (nav) {
@@ -194,17 +226,15 @@ export default function AlfredChat({
           if (path) router.push(path);
         }
 
-        let spoken = (data.reply ?? "").trim();
+        let spoken = modelText;
         const act = actions.find((a) => a.name !== "navigate");
-
-        // Apply atomically: clear the old panel and set the new one in one tick
-        // (no greeting flash when revising in place).
-        clearPendings();
         if (act) {
-          const built = interpret(act, dir, timeZone.current);
+          const built = interpret(act, dir);
           if (built.error) {
-            spoken = built.error;
+            spoken = built.error; // keep any existing panel so the user can retry
           } else {
+            // Apply atomically — clear old + set new in one tick (no flash).
+            clearPendings();
             if (built.task) {
               taskRef.current = built.task;
               setTaskDraft(built.task);
@@ -221,24 +251,38 @@ export default function AlfredChat({
               confirmRef.current = built.confirm;
               setConfirm(built.confirm);
             }
-            if (built.spoken) spoken = built.spoken;
+            // On an EDIT (a panel was already open) prefer Alfred's natural
+            // acknowledgement; on the FIRST proposal use the deterministic
+            // summary (which echoes the parsed values + the menu).
+            spoken = hadPending && modelText ? modelText : built.spoken ?? modelText;
           }
         }
+        // (No actionable tool + a panel was open → keep the panel, just answer.)
         if (!spoken && nav) spoken = "Right away.";
 
         addAssistant(spoken);
-        speakLine(spoken, () => {
-          if (hasPending()) startListening();
-        });
+        speakLine(spoken, resumeListening);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Something went wrong.");
+        setBusy(false);
       } finally {
         setBusy(false);
       }
     },
-    // startListening defined below; stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [messages, router, addAssistant, speakLine, clearPendings, hasPending],
+    [messages, router, addAssistant, speakLine, clearPendings, hasPending, resumeListening],
+  );
+
+  const freeForm = useCallback(
+    (utterance: string) => {
+      const msg = buildPendingMessage(utterance, rosterRef.current, {
+        task: taskRef.current,
+        email: emailRefState.current,
+        event: eventRefState.current,
+        confirm: confirmRef.current?.description ?? null,
+      });
+      void send(msg);
+    },
+    [send],
   );
 
   /* ── Result + offer ───────────────────────────────────────────────────── */
@@ -250,16 +294,10 @@ export default function AlfredChat({
       if (offer) {
         confirmRef.current = offer;
         setConfirm(offer);
-        speakLine(line, () => {
-          if (confirmRef.current) startListening();
-        });
-      } else {
-        speakLine(line);
       }
+      speakLine(line, resumeListening);
     },
-    // startListening defined below
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [addAssistant, speakLine],
+    [addAssistant, speakLine, resumeListening],
   );
 
   /* ── Submit handlers ──────────────────────────────────────────────────── */
@@ -267,8 +305,8 @@ export default function AlfredChat({
   const submitTask = useCallback(async () => {
     const d = taskRef.current;
     if (!d) return;
-    if (!d.title.trim()) return speakLine("It will need a title first.");
-    recRef.current?.abort();
+    if (!d.title.trim()) return speakLine("It will need a title first.", resumeListening);
+    stopRecForAction();
     taskRef.current = null;
     setTaskDraft(null);
     setBusy(true);
@@ -296,13 +334,13 @@ export default function AlfredChat({
     } catch {
       finishWithResult("I couldn't create that, I'm afraid.");
     }
-  }, [speakLine, finishWithResult, router, onDismiss]);
+  }, [speakLine, resumeListening, stopRecForAction, finishWithResult, router, onDismiss]);
 
   const submitEmailDraft = useCallback(async () => {
     const d = emailRefState.current;
     if (!d) return;
-    if (!d.to.trim()) return speakLine("It needs a recipient first.");
-    recRef.current?.abort();
+    if (!d.to.trim()) return speakLine("It needs a recipient first.", resumeListening);
+    stopRecForAction();
     emailRefState.current = null;
     setEmailDraft(null);
     setBusy(true);
@@ -314,13 +352,13 @@ export default function AlfredChat({
     } catch {
       finishWithResult("I couldn't do that with your email, I'm afraid.");
     }
-  }, [speakLine, finishWithResult]);
+  }, [speakLine, resumeListening, stopRecForAction, finishWithResult]);
 
   const submitEmailSend = useCallback(async () => {
     const d = emailRefState.current;
     if (!d) return;
-    if (!d.to.trim()) return speakLine("It needs a recipient first.");
-    recRef.current?.abort();
+    if (!d.to.trim()) return speakLine("It needs a recipient first.", resumeListening);
+    stopRecForAction();
     emailRefState.current = null;
     setEmailDraft(null);
     setBusy(true);
@@ -330,12 +368,12 @@ export default function AlfredChat({
     } catch {
       finishWithResult("I couldn't send that, I'm afraid.");
     }
-  }, [speakLine, finishWithResult]);
+  }, [speakLine, resumeListening, stopRecForAction, finishWithResult]);
 
   const submitEvent = useCallback(async () => {
     const d = eventRefState.current;
     if (!d) return;
-    recRef.current?.abort();
+    stopRecForAction();
     eventRefState.current = null;
     setEventDraft(null);
     setBusy(true);
@@ -357,91 +395,87 @@ export default function AlfredChat({
     } catch {
       finishWithResult("I couldn't do that with your calendar, I'm afraid.");
     }
-  }, [finishWithResult]);
+  }, [stopRecForAction, finishWithResult]);
 
   const doConfirm = useCallback(async () => {
     const c = confirmRef.current;
     if (!c) return;
-    recRef.current?.abort();
+    stopRecForAction();
     confirmRef.current = null;
     setConfirm(null);
     setBusy(true);
     const result = await c.run();
-    setBusy(false);
-    addAssistant(result);
-    speakLine(result);
-  }, [addAssistant, speakLine]);
+    finishWithResult(result);
+  }, [stopRecForAction, finishWithResult]);
 
   const cancelPending = useCallback(() => {
-    recRef.current?.abort();
-    revisingRef.current = false;
+    stopRecForAction();
     clearPendings();
-    const line = "Very good — I'll leave it.";
-    addAssistant(line);
-    speakLine(line);
-  }, [clearPendings, addAssistant, speakLine]);
-
-  /* ── Revise: keep the panel, ask what to change, re-propose in place ────── */
+    finishWithResult("Very good — I'll leave it.");
+  }, [stopRecForAction, clearPendings, finishWithResult]);
 
   const triggerRevise = useCallback(() => {
     if (!(taskRef.current || emailRefState.current || eventRefState.current)) return;
-    revisingRef.current = true;
-    speakLine("Of course — what would you like to change?", () => startListening());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speakLine]);
+    stopRecForAction();
+    speakLine("Of course — what would you like to change?", resumeListening);
+  }, [stopRecForAction, speakLine, resumeListening]);
 
-  const reviseSend = useCallback(
-    (instruction: string) => {
-      const msg = buildReviseMessage(instruction, rosterRef.current, {
-        task: taskRef.current,
-        email: emailRefState.current,
-        event: eventRefState.current,
-      });
-      if (msg) void send(msg);
-    },
-    [send],
-  );
+  const endConversation = useCallback(() => {
+    conversingRef.current = false;
+    stopRecForAction();
+    clearPendings();
+    if (onDismiss) onDismiss();
+    else speakLine("Very good, sir.");
+  }, [stopRecForAction, clearPendings, onDismiss, speakLine]);
 
-  /* ── Voice routing ────────────────────────────────────────────────────── */
+  /* ── Voice routing while a panel is open ──────────────────────────────── */
 
   const resolveByVoice = useCallback(
     (text: string) => {
-      const t = text.toLowerCase();
-      const relisten = () => {
-        if (hasPending()) startListening();
-      };
-      if (REVISE.test(t) && (taskRef.current || emailRefState.current || eventRefState.current)) {
+      const t = text.toLowerCase().trim();
+      const words = t.split(/\s+/).filter(Boolean).length;
+      const shortCmd = words <= 4;
+
+      // Bare "revise/redraft" → ask what to change; with an instruction → interpret.
+      if (REVISE_WORD.test(t) && words <= 2) {
         triggerRevise();
         return;
       }
+      if (shortCmd && (CANCEL.test(t) || NO_BARE.test(t))) {
+        cancelPending();
+        return;
+      }
+
       if (emailRefState.current) {
-        if (SEND.test(t)) void submitEmailSend();
-        else if (SAVE.test(t) || YES.test(t)) void submitEmailDraft();
-        else if (NO.test(t)) cancelPending();
-        else speakLine("Send, save draft, redraft, or cancel?", relisten);
-      } else if (taskRef.current) {
-        if (YES.test(t)) void submitTask();
-        else if (NO.test(t)) cancelPending();
-        else speakLine("Create, revise, or cancel?", relisten);
-      } else if (eventRefState.current) {
-        if (YES.test(t)) void submitEvent();
-        else if (NO.test(t)) cancelPending();
-        else speakLine("Confirm, revise, or cancel?", relisten);
-      } else if (confirmRef.current) {
-        if (YES.test(t)) void doConfirm();
-        else if (NO.test(t)) cancelPending();
-        else speakLine("Confirm or cancel?", relisten);
+        if (shortCmd && SEND.test(t)) return void submitEmailSend();
+        if (shortCmd && SAVE.test(t)) return void submitEmailDraft();
+        if (shortCmd && AFFIRM.test(t)) return void submitEmailDraft();
+        return freeForm(text);
+      }
+      if (taskRef.current) {
+        if (shortCmd && AFFIRM.test(t)) return void submitTask();
+        return freeForm(text);
+      }
+      if (eventRefState.current) {
+        if (shortCmd && AFFIRM.test(t)) return void submitEvent();
+        return freeForm(text);
+      }
+      if (confirmRef.current) {
+        if (shortCmd && AFFIRM.test(t)) return void doConfirm();
+        return freeForm(text);
       }
     },
-    // startListening defined below
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [submitTask, submitEmailDraft, submitEmailSend, submitEvent, doConfirm, cancelPending, triggerRevise, speakLine, hasPending],
+    [triggerRevise, cancelPending, submitEmailSend, submitEmailDraft, submitTask, submitEvent, doConfirm, freeForm],
   );
 
+  /* ── Listening loop ───────────────────────────────────────────────────── */
+
   const startListening = useCallback(() => {
+    if (recRef.current) return; // one recognizer at a time
     setError(null);
     stopSpeaking();
     onSpeakingChange(false);
+    conversingRef.current = true;
 
     const w = window as unknown as {
       SpeechRecognition?: new () => Recognition;
@@ -469,25 +503,32 @@ export default function AlfredChat({
     rec.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         setError("I can't hear you — microphone access is blocked.");
-      } else if (e.error === "no-speech") {
-        setError("I didn't catch anything. Tap and try again.");
-      } else if (e.error !== "aborted") {
-        setError("I had trouble listening. Do try again.");
+        conversingRef.current = false;
+      } else if (e.error !== "aborted" && e.error !== "no-speech") {
+        setError("I had trouble listening. Tap to try again.");
       }
     };
     rec.onend = () => {
       setListening(false);
       recRef.current = null;
-      const text = finalRef.current.trim();
-      if (!text) return;
-      if (revisingRef.current) {
-        revisingRef.current = false;
-        reviseSend(text);
+      if (stoppingRef.current) {
+        stoppingRef.current = false;
         return;
       }
-      if (hasPending()) resolveByVoice(text);
-      else if (onDismiss && DISMISS.test(text.toLowerCase())) onDismiss();
-      else void send(text);
+      const text = finalRef.current.trim();
+      if (!text) {
+        // Silence — keep the conversation alive (hands-free) until "that's all".
+        if (activeRef.current && (conversingRef.current || hasPending())) {
+          window.setTimeout(() => resumeListening(), 400);
+        }
+        return;
+      }
+      if (DISMISS.test(text.toLowerCase())) {
+        endConversationRef.current?.();
+        return;
+      }
+      if (hasPending()) resolveByVoiceRef.current?.(text);
+      else sendRef.current?.(text);
     };
 
     recRef.current = rec;
@@ -496,26 +537,45 @@ export default function AlfredChat({
       setListening(true);
     } catch {
       setListening(false);
-      setError("I couldn't start listening. Do try again.");
+      setError("I couldn't start listening. Tap to try again.");
     }
-  }, [onSpeakingChange, send, resolveByVoice, reviseSend, onDismiss, hasPending]);
+  }, [onSpeakingChange, hasPending, resumeListening]);
 
+  // Keep the "latest" refs current so recognizer handlers never go stale.
+  useEffect(() => {
+    sendRef.current = send;
+    resolveByVoiceRef.current = resolveByVoice;
+    endConversationRef.current = endConversation;
+    startListeningRef.current = startListening;
+  });
+
+  // Deactivated (overlay closed) — stop everything; conversation pauses.
   useEffect(() => {
     if (active) return;
-    recRef.current?.abort();
+    conversingRef.current = false;
+    if (recRef.current) {
+      stoppingRef.current = true;
+      recRef.current.abort();
+    }
     stopSpeaking();
     setListening(false);
     onSpeakingChange(false);
   }, [active, onSpeakingChange]);
 
   useEffect(() => {
-    if (autoListenKey > 0 && active) startListening();
+    if (autoListenKey > 0 && active) startListeningRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoListenKey]);
 
   function toggleMic() {
     if (listening) {
-      recRef.current?.stop();
+      conversingRef.current = false; // tapping to stop pauses the conversation
+      if (recRef.current) {
+        stoppingRef.current = true;
+        recRef.current.stop();
+      } else {
+        setListening(false);
+      }
       return;
     }
     if (busy) return;
@@ -536,11 +596,7 @@ export default function AlfredChat({
     { label: "Cancel", kind: "ghost", onClick: cancelPending },
   ];
   const eventOptions: PanelOption[] = [
-    {
-      label: eventDraft?.mode === "reschedule" ? "Reschedule" : "Create",
-      kind: "primary",
-      onClick: () => void submitEvent(),
-    },
+    { label: eventDraft?.mode === "reschedule" ? "Reschedule" : "Create", kind: "primary", onClick: () => void submitEvent() },
     { label: "Revise", kind: "ghost", onClick: triggerRevise },
     { label: "Cancel", kind: "ghost", onClick: cancelPending },
   ];
@@ -553,12 +609,12 @@ export default function AlfredChat({
     ? "Voice input isn't supported in this browser."
     : error
       ? ""
-      : panelOpen
-        ? "Tap a choice, or just say it"
-        : listening
-          ? "Listening… tap to stop"
-          : busy
-            ? "One moment…"
+      : listening
+        ? "Listening — say “that’s all” when you’re done"
+        : busy
+          ? "One moment…"
+          : panelOpen
+            ? "Tap a choice, or just say it"
             : "Tap to talk to Alfred";
 
   return (
@@ -666,7 +722,7 @@ type Interpretation = {
   error?: string;
 };
 
-function interpret(act: ActionCall, dir: Directory, _tz: string): Interpretation {
+function interpret(act: ActionCall, dir: Directory): Interpretation {
   const input = act.input;
   switch (act.name) {
     case "create_task":
@@ -836,37 +892,36 @@ function interpretCancel(input: Record<string, unknown>, dir: Directory): Interp
   };
 }
 
-/* ── Revise message — current proposal + the requested change ───────────── */
+/* ── Free-form message: current proposal + what the user said ────────────── */
 
-function buildReviseMessage(
-  instruction: string,
+function buildPendingMessage(
+  utterance: string,
   roster: Person[],
-  pend: { task: TaskDraft | null; email: EmailDraftState | null; event: EventDraftState | null },
-): string | null {
-  const change = instruction.trim();
-  if (!change) return null;
+  pend: { task: TaskDraft | null; email: EmailDraftState | null; event: EventDraftState | null; confirm: string | null },
+): string {
+  const u = utterance.trim();
   if (pend.task) {
     const t = pend.task;
-    const names = t.assigneeIds
-      .map((id) => roster.find((p) => p.id === id)?.first)
-      .filter(Boolean)
-      .join(", ");
-    return `Please revise the task we're about to create. Current — title: "${t.title}"; assignees: ${
-      names || "none"
-    }; due: ${t.due || "none"}; priority: ${t.priority}; visibility: ${t.visibility}. The change: ${change}. Re-propose it with create_task.`;
+    const names = t.assigneeIds.map((id) => roster.find((p) => p.id === id)?.first).filter(Boolean).join(", ");
+    return `I'm reviewing a draft task — title: "${t.title}"; assignees: ${names || "none"}; due: ${
+      t.due || "none"
+    }; priority: ${t.priority}; visibility: ${t.visibility}. I said: "${u}". If that's an edit, re-propose the task with create_task applying it. Otherwise just answer me.`;
   }
   if (pend.email) {
     const e = pend.email;
     const kind = e.messageId ? `reply to ${e.fromName || e.to}` : `email to ${e.to}`;
-    return `Please revise the ${kind} we're drafting (subject "${e.subject}"). Current body: "${e.body}". The change: ${change}. Re-propose the same email as a draft.`;
+    return `I'm reviewing a draft ${kind}, subject "${e.subject}", body: "${e.body}". I said: "${u}". If that's an edit, re-propose the same email (draft_reply/draft_email) with it applied. Otherwise just answer me.`;
   }
   if (pend.event) {
     const v = pend.event;
-    return `Please revise the event we're proposing. Current — title: "${v.title}"; start: ${v.start}; end: ${v.end}; attendees: ${
-      v.attendees || "none"
-    }. The change: ${change}. Re-propose it.`;
+    return `I'm reviewing a ${v.mode === "reschedule" ? "reschedule" : "draft event"} — title: "${v.title}"; start: ${
+      v.start
+    }; end: ${v.end}; attendees: ${v.attendees || "none"}. I said: "${u}". If that's an edit, re-propose it with the right calendar tool. Otherwise just answer me.`;
   }
-  return null;
+  if (pend.confirm) {
+    return `I'm reviewing this proposal: "${pend.confirm}". I said: "${u}". If that changes it, re-propose with the right tool. Otherwise just answer me.`;
+  }
+  return u;
 }
 
 /* ── Resolution + formatting helpers ───────────────────────────────────── */
