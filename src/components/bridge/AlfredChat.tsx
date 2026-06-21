@@ -41,6 +41,8 @@ const NAV: Record<string, string> = {
 
 const YES = /\b(yes|yeah|yep|yup|confirm|create it|do it|go ahead|please|sure|affirmative|correct|aye)\b/;
 const NO = /\b(no|nope|nah|cancel|don'?t|stop|never\s?mind|negative|leave it)\b/;
+const DISMISS =
+  /\b(that'?s all|that'?ll be all|that is all|dismiss|go away|goodbye|good bye|thank you alfred|thanks alfred|nothing else|that'?s it)\b/;
 
 /* Minimal shape of the browser SpeechRecognition we use. */
 type RecognitionResult = { isFinal: boolean; 0: { transcript: string } };
@@ -62,9 +64,19 @@ type Recognition = {
 export default function AlfredChat({
   onSpeakingChange,
   onListeningChange,
+  active = true,
+  onDismiss,
+  autoListenKey = 0,
 }: {
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
+  /** When false (e.g. overlay closed), Alfred stops listening/speaking but
+   *  keeps the conversation in memory. Defaults true (the Bridge). */
+  active?: boolean;
+  /** If provided, saying "that's all" dismisses Alfred (used by the overlay). */
+  onDismiss?: () => void;
+  /** Increment to make Alfred start listening immediately (e.g. on wake word). */
+  autoListenKey?: number;
 }) {
   const router = useRouter();
 
@@ -324,7 +336,8 @@ export default function AlfredChat({
         description: `Open “${d.title.trim()}” now?`,
         run: async () => {
           router.push(`/dashboard/tasks?task=${id}`);
-          return "Right away.";
+          onDismiss?.(); // reveal the task — close the overlay if we're in one
+          return "";
         },
       };
       confirmRef.current = offer;
@@ -336,7 +349,7 @@ export default function AlfredChat({
       speakLine(line);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addAssistant, speakLine, router]);
+  }, [addAssistant, speakLine, router, onDismiss]);
 
   const cancelDraft = useCallback(() => {
     recRef.current?.abort();
@@ -435,6 +448,7 @@ export default function AlfredChat({
       const text = finalRef.current.trim();
       if (!text) return;
       if (draftRef.current || confirmRef.current) resolveByVoice(text);
+      else if (onDismiss && DISMISS.test(text.toLowerCase())) onDismiss();
       else void send(text);
     };
 
@@ -446,7 +460,23 @@ export default function AlfredChat({
       setListening(false);
       setError("I couldn't start listening. Do try again.");
     }
-  }, [onSpeakingChange, send, resolveByVoice]);
+  }, [onSpeakingChange, send, resolveByVoice, onDismiss]);
+
+  // When deactivated (overlay closed), stop listening/speaking — keep the
+  // conversation in memory so it resumes on reopen.
+  useEffect(() => {
+    if (active) return;
+    recRef.current?.abort();
+    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    setListening(false);
+    onSpeakingChange(false);
+  }, [active, onSpeakingChange]);
+
+  // Wake word / auto-listen: start listening as soon as Alfred is summoned.
+  useEffect(() => {
+    if (autoListenKey > 0 && active) startListening();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoListenKey]);
 
   function toggleMic() {
     if (listening) {

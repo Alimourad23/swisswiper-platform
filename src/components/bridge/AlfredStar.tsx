@@ -17,9 +17,11 @@ import { useEffect, useRef } from "react";
 export default function AlfredStar({
   speaking,
   listening = false,
+  className = "aspect-square h-[clamp(190px,40vh,360px)] w-auto",
 }: {
   speaking: boolean;
   listening?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const target = useRef(0);
@@ -230,11 +232,5 @@ export default function AlfredStar({
     };
   }, []);
 
-  return (
-    <canvas
-      ref={ref}
-      aria-hidden="true"
-      className="aspect-square h-[clamp(190px,40vh,360px)] w-auto"
-    />
-  );
+  return <canvas ref={ref} aria-hidden="true" className={className} />;
 }
