@@ -3,35 +3,51 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-/* Read-only Google scopes we request alongside basic profile/email.
-   gmail.readonly + calendar.readonly — we can read, never modify. */
+/* Google scopes we request alongside basic profile/email.
+   Read: gmail.readonly + calendar.readonly.
+   Write (for Alfred's actions): gmail.compose (draft/send) + calendar.events
+   (create/move/cancel). We can read everything and act within these. */
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/gmail.compose",
+  "https://www.googleapis.com/auth/calendar.events",
 ].join(" ");
 
 export default function GoogleAuthButton({
   label = "Sign in with Google",
   variant = "primary",
+  forceConsent = false,
 }: {
   label?: string;
-  variant?: "primary" | "inline";
+  variant?: "primary" | "inline" | "subtle";
+  /** Force Google's consent screen — for "Reconnect Google" when the stored
+   *  refresh token is lost or scopes need re-granting. Normal sign-in omits it
+   *  so logins are seamless after the one-time incremental consent. */
+  forceConsent?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
 
   async function start() {
     setLoading(true);
     const supabase = createClient();
+
+    // access_type=offline → Google returns a refresh token on first/forced
+    // consent. include_granted_scopes=true → incremental auth: adding the new
+    // write scopes prompts ONCE, then later logins are consent-free. We only
+    // add prompt=consent for an explicit reconnect.
+    const queryParams: Record<string, string> = {
+      access_type: "offline",
+      include_granted_scopes: "true",
+    };
+    if (forceConsent) queryParams.prompt = "consent";
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
         scopes: GOOGLE_SCOPES,
-        // offline + consent => Google returns a refresh token we can store.
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
+        queryParams,
       },
     });
     if (error) {
@@ -40,6 +56,19 @@ export default function GoogleAuthButton({
       console.error("Google sign-in failed:", error.message);
     }
     // On success the browser is redirected to Google.
+  }
+
+  if (variant === "subtle") {
+    return (
+      <button
+        type="button"
+        onClick={start}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink disabled:opacity-60"
+      >
+        {loading ? "Connecting…" : label}
+      </button>
+    );
   }
 
   const className =

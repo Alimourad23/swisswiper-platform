@@ -15,6 +15,12 @@ export async function GET(request: Request) {
 
     if (!error) {
       // Securely store the Google refresh token for this user (server-side only).
+      //
+      // CRITICAL: only write when Google actually returns a refresh token.
+      // Seamless (consent-free) logins do NOT return one — and overwriting the
+      // stored token with null/empty would break Gmail/Calendar. So we upsert
+      // ONLY when `provider_refresh_token` is present; otherwise the existing
+      // token is preserved untouched.
       const session = data.session;
       const refreshToken = session?.provider_refresh_token;
       const userId = session?.user?.id;

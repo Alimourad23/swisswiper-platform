@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import GoogleAuthButton from "@/components/GoogleAuthButton";
 
 export default function UserMenu({
   name,
@@ -46,6 +47,12 @@ export default function UserMenu({
           {initial}
         </div>
       )}
+
+      {/* Recovery for the rare case the stored Google token is lost or scopes
+          need re-granting — forces the consent screen. */}
+      <span className="hidden sm:inline">
+        <GoogleAuthButton variant="subtle" forceConsent label="Reconnect Google" />
+      </span>
 
       <button
         type="button"
