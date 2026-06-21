@@ -117,6 +117,7 @@ export default function AlfredChat({
   const recRef = useRef<Recognition | null>(null);
   const finalRef = useRef("");
   const interimRef = useRef(""); // latest interim text — fallback if stop() beats Chrome's finalise
+  const silenceTimerRef = useRef<number | null>(null); // end-of-utterance silence timeout
   const confirmRef = useRef<Confirm | null>(null);
   const taskRef = useRef<TaskDraft | null>(null);
   const emailRefState = useRef<EmailDraftState | null>(null);
@@ -200,13 +201,21 @@ export default function AlfredChat({
     }
   }, [hasPending]);
 
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current !== null) {
+      window.clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
   // Intentional stop (before an action) — suppress the auto-continue.
   const stopRecForAction = useCallback(() => {
+    clearSilenceTimer();
     if (recRef.current) {
       stoppingRef.current = true;
       recRef.current.abort();
     }
-  }, []);
+  }, [clearSilenceTimer]);
 
   /* ── Brain turn ───────────────────────────────────────────────────────── */
 
@@ -528,7 +537,20 @@ export default function AlfredChat({
       // (never on interim noise or a substring inside a request).
       if (!ended && isDismiss(finalRef.current)) {
         ended = true;
+        clearSilenceTimer();
         endConversationRef.current?.();
+        return;
+      }
+      // End-of-utterance silence: continuous=true means Chrome won't fire onend
+      // on a short pause, so detect the pause ourselves. After any speech this
+      // turn, (re)arm a timer that stop()s the recognizer — NOT abort, and
+      // without stoppingRef, so onend runs and submits the accumulated text.
+      if (finalRef.current.trim() || interimRef.current.trim()) {
+        clearSilenceTimer();
+        silenceTimerRef.current = window.setTimeout(() => {
+          silenceTimerRef.current = null;
+          recRef.current?.stop();
+        }, 1300);
       }
     };
     rec.onerror = (e) => {
@@ -540,6 +562,7 @@ export default function AlfredChat({
       }
     };
     rec.onend = () => {
+      clearSilenceTimer();
       setListening(false);
       recRef.current = null;
       if (stoppingRef.current) {
@@ -580,7 +603,7 @@ export default function AlfredChat({
       setListening(false);
       setError("I couldn't start listening. Tap to try again.");
     }
-  }, [onEngage, onSpeakingChange, hasPending, resumeListening]);
+  }, [onEngage, onSpeakingChange, hasPending, resumeListening, clearSilenceTimer]);
 
   // Keep the "latest" refs current so recognizer handlers never go stale.
   useEffect(() => {
