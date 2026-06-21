@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import AlfredOverlay from "@/components/bridge/AlfredOverlay";
 import { unlockAudio } from "@/lib/bridge/voice";
 
@@ -51,6 +52,22 @@ export default function AlfredSummon() {
   }, []);
 
   const close = useCallback(() => setOpen(false), []);
+
+  // The Overview hero orb (and anything else) summons Alfred via this event,
+  // so the floating control can be hidden there without losing the overlay.
+  useEffect(() => {
+    function onSummon() {
+      unlockAudio();
+      setOpen(true);
+      setAutoListenKey((k) => k + 1);
+    }
+    window.addEventListener("sw-alfred-summon", onSummon);
+    return () => window.removeEventListener("sw-alfred-summon", onSummon);
+  }, []);
+
+  // Hide the floating control on the Overview — its hero orb is the entry point.
+  const pathname = usePathname();
+  const hideControl = pathname === "/dashboard/overview";
 
   function toggleWake() {
     unlockAudio(); // user gesture — unlock ElevenLabs playback for later
@@ -137,7 +154,8 @@ export default function AlfredSummon() {
 
   return (
     <>
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2 print:hidden">
+      {!hideControl && (
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-center gap-2 print:hidden">
         {wakeSupported && (
           <button
             type="button"
@@ -178,7 +196,8 @@ export default function AlfredSummon() {
             <path d="M12 3l1.9 5.4a3 3 0 0 0 1.8 1.8L21 12l-5.3 1.9a3 3 0 0 0-1.8 1.8L12 21l-1.9-5.3a3 3 0 0 0-1.8-1.8L3 12l5.3-1.8a3 3 0 0 0 1.8-1.8z" />
           </svg>
         </button>
-      </div>
+        </div>
+      )}
 
       <AlfredOverlay open={open} onClose={close} autoListenKey={autoListenKey} />
     </>

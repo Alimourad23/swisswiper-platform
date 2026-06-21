@@ -75,6 +75,7 @@ export default function AlfredChat({
   onSpeakingChange,
   onListeningChange,
   onPanelOpenChange,
+  onEngage,
   active = true,
   onDismiss,
   autoListenKey = 0,
@@ -82,6 +83,9 @@ export default function AlfredChat({
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
   onPanelOpenChange?: (open: boolean) => void;
+  /** Fires the first time the user engages (taps mic, speaks, or an action
+   *  starts) — the Bridge uses it to collapse the briefing and keep it short. */
+  onEngage?: () => void;
   active?: boolean;
   onDismiss?: () => void;
   autoListenKey?: number;
@@ -197,6 +201,7 @@ export default function AlfredChat({
 
   const send = useCallback(
     async (text: string) => {
+      onEngage?.();
       const hadPending = hasPending();
       const next: ChatMessage[] = [...messages, { role: "user", content: text }];
       setMessages(next);
@@ -269,7 +274,7 @@ export default function AlfredChat({
         setBusy(false);
       }
     },
-    [messages, router, addAssistant, speakLine, clearPendings, hasPending, resumeListening],
+    [messages, router, addAssistant, speakLine, clearPendings, hasPending, resumeListening, onEngage],
   );
 
   const freeForm = useCallback(
@@ -472,6 +477,7 @@ export default function AlfredChat({
 
   const startListening = useCallback(() => {
     if (recRef.current) return; // one recognizer at a time
+    onEngage?.();
     setError(null);
     stopSpeaking();
     onSpeakingChange(false);
@@ -490,14 +496,22 @@ export default function AlfredChat({
     const rec = new Ctor();
     rec.lang = "en-GB";
     rec.interimResults = true;
-    rec.continuous = false;
+    rec.continuous = true; // keep listening through natural pauses
     rec.maxAlternatives = 1;
     finalRef.current = "";
+    let ended = false;
 
     rec.onresult = (e) => {
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) finalRef.current += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      // End the conversation promptly the moment the user says "that's all".
+      if (!ended && DISMISS.test(`${finalRef.current} ${interim}`.toLowerCase())) {
+        ended = true;
+        endConversationRef.current?.();
       }
     };
     rec.onerror = (e) => {
@@ -515,20 +529,23 @@ export default function AlfredChat({
         stoppingRef.current = false;
         return;
       }
+      if (ended) return; // dismiss already handled in onresult
       const text = finalRef.current.trim();
-      if (!text) {
-        // Silence — keep the conversation alive (hands-free) until "that's all".
-        if (activeRef.current && (conversingRef.current || hasPending())) {
-          window.setTimeout(() => resumeListening(), 400);
-        }
-        return;
-      }
-      if (DISMISS.test(text.toLowerCase())) {
+      if (text && DISMISS.test(text.toLowerCase())) {
         endConversationRef.current?.();
         return;
       }
-      if (hasPending()) resolveByVoiceRef.current?.(text);
-      else sendRef.current?.(text);
+      if (text) {
+        // Process the turn; Alfred's reply will resume the loop afterwards.
+        if (hasPending()) resolveByVoiceRef.current?.(text);
+        else sendRef.current?.(text);
+        return;
+      }
+      // Silence / natural end — restart immediately so a pause never ends the
+      // conversation. It only stops on "that's all" / dismiss / deactivate.
+      if (activeRef.current && (conversingRef.current || hasPending())) {
+        window.setTimeout(() => resumeListening(), 120);
+      }
     };
 
     recRef.current = rec;
@@ -539,7 +556,7 @@ export default function AlfredChat({
       setListening(false);
       setError("I couldn't start listening. Tap to try again.");
     }
-  }, [onSpeakingChange, hasPending, resumeListening]);
+  }, [onEngage, onSpeakingChange, hasPending, resumeListening]);
 
   // Keep the "latest" refs current so recognizer handlers never go stale.
   useEffect(() => {

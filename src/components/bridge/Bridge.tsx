@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AlfredStar from "@/components/bridge/AlfredStar";
 import StarfieldCanvas from "@/components/bridge/StarfieldCanvas";
@@ -20,17 +20,16 @@ const LAST_KEY = "sw-bridge-briefed-at";
 const FULL_AFTER_MS = 3 * 60 * 60 * 1000;
 
 // Warm, varied butler follow-ups for the calm short state (after engaging /
-// after an action). Some are just the greeting on its own.
+// after any action). Some are just the greeting on its own.
 function pickShort(firstName: string): string {
   const lines = [
-    "",
-    "",
-    `What else would you like to do, ${firstName}?`,
+    "How may I help you, sir?",
+    "How may I be of assistance?",
+    "At your service, sir.",
     `Anything else I can do for you, ${firstName}?`,
-    "How else may I be of service?",
+    `What else would you like to do, ${firstName}?`,
     "Ready whenever you are.",
-    "At your service.",
-    "What shall we see to next?",
+    "",
   ];
   return lines[Math.floor(Math.random() * lines.length)];
 }
@@ -46,7 +45,18 @@ export default function Bridge({ data }: { data: BridgeData }) {
   const [collapsed, setCollapsed] = useState(false);
   const [shortLine, setShortLine] = useState("");
   const prevPanelOpen = useRef(false);
+  const engagedRef = useRef(false);
   const spokenRef = useRef(false);
+
+  // The moment the user engages (taps mic / speaks / starts any action), the
+  // full briefing collapses to a calm short greeting — and stays short for the
+  // rest of the visit (Cancel and completion behave identically).
+  const handleEngage = useCallback(() => {
+    if (engagedRef.current) return;
+    engagedRef.current = true;
+    setCollapsed(true);
+    setShortLine(pickShort(data.firstName));
+  }, [data.firstName]);
 
   // Device-tz "now" + the full/short decision are only known after mount.
   useEffect(() => {
@@ -72,15 +82,6 @@ export default function Bridge({ data }: { data: BridgeData }) {
     () => (now == null || mode == null ? null : composeBriefing(data, now, mode)),
     [data, now, mode],
   );
-
-  // Collapse the full briefing to a calm short greeting the moment the user
-  // engages — so it isn't re-shown after a panel/action closes.
-  useEffect(() => {
-    if ((listening || panelOpen) && !collapsed) {
-      setCollapsed(true);
-      setShortLine(pickShort(data.firstName));
-    }
-  }, [listening, panelOpen, collapsed, data.firstName]);
 
   // After an action panel closes, freshen the warm short line for variety.
   useEffect(() => {
@@ -199,6 +200,7 @@ export default function Bridge({ data }: { data: BridgeData }) {
           onSpeakingChange={setSpeaking}
           onListeningChange={setListening}
           onPanelOpenChange={setPanelOpen}
+          onEngage={handleEngage}
         />
 
         {/* Quiet way into the dashboard — hidden while a review panel is open. */}
