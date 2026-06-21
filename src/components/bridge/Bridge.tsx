@@ -13,19 +13,43 @@ import { speak, stopSpeaking } from "@/lib/bridge/voice";
    aloud automatically (no buttons), then offers a quiet way into the dashboard.
    Everything fits one viewport — no scrolling. */
 
+// Full briefing on the first Bridge visit of a session, or when it's been a
+// while since the last (>3h, or a new calendar day); otherwise a short greeting.
+const SESSION_KEY = "sw-bridge-session";
+const LAST_KEY = "sw-bridge-briefed-at";
+const FULL_AFTER_MS = 3 * 60 * 60 * 1000;
+
 export default function Bridge({ data }: { data: BridgeData }) {
   const [now, setNow] = useState<number | null>(null);
+  const [mode, setMode] = useState<"full" | "short" | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const spokenRef = useRef(false);
 
-  // Device-tz "now" is only known after mount — compute the briefing then.
-  useEffect(() => setNow(Date.now()), []);
+  // Device-tz "now" + the full/short decision are only known after mount.
+  useEffect(() => {
+    const t = Date.now();
+    setNow(t);
+
+    let full = true;
+    try {
+      const sessionBriefed = window.sessionStorage.getItem(SESSION_KEY) === "1";
+      const lastAt = Number(window.localStorage.getItem(LAST_KEY) || 0);
+      const overThreeHours = !lastAt || t - lastAt > FULL_AFTER_MS;
+      const newDay = !lastAt || new Date(lastAt).toDateString() !== new Date(t).toDateString();
+      full = !sessionBriefed || overThreeHours || newDay;
+      window.sessionStorage.setItem(SESSION_KEY, "1");
+      window.localStorage.setItem(LAST_KEY, String(t));
+    } catch {
+      full = true; // storage unavailable — give the full briefing
+    }
+    setMode(full ? "full" : "short");
+  }, []);
 
   const briefing = useMemo(
-    () => (now == null ? null : composeBriefing(data, now)),
-    [data, now],
+    () => (now == null || mode == null ? null : composeBriefing(data, now, mode)),
+    [data, now, mode],
   );
 
   // Auto-speak the briefing in Alfred's voice. Audio is blocked before a user

@@ -14,11 +14,14 @@ export type BridgeData = {
   marketing: { followers: number; engagementRatePct: number } | null;
 };
 
+export type BriefingMode = "full" | "short";
+
 export type Briefing = {
   greeting: string; // "Good evening, Ali"
-  synthesis: string; // one calm/busy line
-  lines: string[]; // the few specifics, elegantly displayed
+  synthesis: string; // one calm/busy line (full) or "How may I be of assistance?" (short)
+  lines: string[]; // the few specifics — empty in short mode
   spoken: string; // the full text Alfred speaks aloud
+  mode: BriefingMode;
 };
 
 export function partOfDay(now: number): "morning" | "afternoon" | "evening" {
@@ -52,9 +55,25 @@ function isDueToday(iso: string | null, now: number): boolean {
 
 const plural = (n: number) => (n === 1 ? "" : "s");
 
-export function composeBriefing(data: BridgeData, now: number): Briefing {
+export function composeBriefing(
+  data: BridgeData,
+  now: number,
+  mode: BriefingMode = "full",
+): Briefing {
   const part = partOfDay(now);
   const greeting = `Good ${part}, ${data.firstName}`;
+
+  // SHORT — returning soon after, during active work. Just a warm greeting,
+  // no status lines and no long read.
+  if (mode === "short") {
+    return {
+      greeting,
+      synthesis: "How may I be of assistance?",
+      lines: [],
+      spoken: `${greeting}. How may I be of assistance?`,
+      mode: "short",
+    };
+  }
 
   // ── Calendar ──────────────────────────────────────────────────────────
   let meetingLine: string | null = null;
@@ -132,12 +151,13 @@ export function composeBriefing(data: BridgeData, now: number): Briefing {
   }
 
   // ── Spoken text ───────────────────────────────────────────────────────
+  // Full briefing opens with Alfred introducing himself, then the updates.
   const spoken = [
-    `${greeting}.`,
+    `${greeting}. This is Alfred, your personal assistant on the SwissWiper platform. Here's where things stand.`,
     synthesis,
     ...lines.map((l) => `${l.replace(/ — /g, ", ")}.`),
     "I'm here if you need me.",
   ].join(" ");
 
-  return { greeting, synthesis, lines, spoken };
+  return { greeting, synthesis, lines, spoken, mode: "full" };
 }
