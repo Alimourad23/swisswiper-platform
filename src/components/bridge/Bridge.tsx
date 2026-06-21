@@ -6,7 +6,7 @@ import AlfredStar from "@/components/bridge/AlfredStar";
 import StarfieldCanvas from "@/components/bridge/StarfieldCanvas";
 import AlfredChat from "@/components/bridge/AlfredChat";
 import { composeBriefing, type BridgeData } from "@/lib/bridge/briefing";
-import { pickVoice } from "@/lib/bridge/voice";
+import { speak, stopSpeaking } from "@/lib/bridge/voice";
 
 /* THE BRIDGE — the post-login welcome. A calm deep-space canvas that is just
    Alfred, a living star, who greets the user by name and speaks a live briefing
@@ -27,13 +27,12 @@ export default function Bridge({ data }: { data: BridgeData }) {
     [data, now],
   );
 
-  // Auto-speak. Browsers block audio before a user gesture, so we (1) attempt
-  // immediately, (2) retry when voices finish loading, and (3) fall back to the
-  // first pointer/keydown anywhere on the page. No visible "speak" button.
+  // Auto-speak the briefing in Alfred's voice. Audio is blocked before a user
+  // gesture, so we speak as soon as we can and otherwise on the first
+  // pointer/keydown anywhere on the page. No visible "speak" button.
   useEffect(() => {
     if (!briefing) return;
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    const synth = window.speechSynthesis;
+    if (typeof window === "undefined") return;
 
     function removeGestureListeners() {
       window.removeEventListener("pointerdown", onGesture);
@@ -42,45 +41,33 @@ export default function Bridge({ data }: { data: BridgeData }) {
 
     function speakNow() {
       if (spokenRef.current || !briefing) return;
-      const u = new SpeechSynthesisUtterance(briefing.spoken);
-      const voice = pickVoice(synth);
-      if (voice) u.voice = voice;
-      u.lang = voice?.lang || "en-GB";
-      u.rate = 0.96;
-      u.pitch = 1;
-      u.onstart = () => {
-        spokenRef.current = true;
-        setSpeaking(true);
-        removeGestureListeners();
-      };
-      u.onend = () => setSpeaking(false);
-      u.onerror = () => setSpeaking(false);
-      try {
-        synth.cancel();
-        synth.speak(u);
-      } catch {
-        /* stay silent — the visuals carry on regardless */
-      }
+      speak(briefing.spoken, {
+        onStart: () => {
+          spokenRef.current = true;
+          setSpeaking(true);
+          removeGestureListeners();
+        },
+        onEnd: () => setSpeaking(false),
+      });
     }
 
     function onGesture() {
       speakNow();
     }
-    function onVoices() {
-      if (!spokenRef.current) speakNow();
-    }
 
-    synth.addEventListener?.("voiceschanged", onVoices);
     window.addEventListener("pointerdown", onGesture);
     window.addEventListener("keydown", onGesture);
 
-    // Try straight away (works once the entry gesture has primed speech).
-    speakNow();
+    // Only attempt immediately if the page has already had user activation
+    // (so we don't spend a TTS call on a guaranteed-blocked cold load). When
+    // the API can't tell us, attempt anyway — the gesture path is the backstop.
+    const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } })
+      .userActivation;
+    if (!ua || ua.hasBeenActive) speakNow();
 
     return () => {
-      synth.removeEventListener?.("voiceschanged", onVoices);
       removeGestureListeners();
-      synth.cancel();
+      stopSpeaking();
     };
   }, [briefing]);
 

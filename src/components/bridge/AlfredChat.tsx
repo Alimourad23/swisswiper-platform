@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { speak } from "@/lib/bridge/voice";
+import { speak, stopSpeaking } from "@/lib/bridge/voice";
 import { createTask, setStatus } from "@/lib/tasks/actions";
 import { dateInputToIso } from "@/lib/tasks/format";
 import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
@@ -407,7 +407,7 @@ export default function AlfredChat({
 
   const startListening = useCallback(() => {
     setError(null);
-    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    stopSpeaking(); // stop Alfred mid-sentence so the user can interject
     onSpeakingChange(false);
 
     const w = window as unknown as {
@@ -467,7 +467,7 @@ export default function AlfredChat({
   useEffect(() => {
     if (active) return;
     recRef.current?.abort();
-    if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+    stopSpeaking();
     setListening(false);
     onSpeakingChange(false);
   }, [active, onSpeakingChange]);
