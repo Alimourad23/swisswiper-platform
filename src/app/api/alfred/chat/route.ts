@@ -6,18 +6,76 @@ import { getInboxView } from "@/lib/google/gmail";
 import { getCalendarData, type CalEventRaw } from "@/lib/google/calendar";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { windowAgg } from "@/lib/linkedin/compute";
-import { getTasksData } from "@/lib/tasks/data";
+import { getTasksData, type TasksData } from "@/lib/tasks/data";
+import { displayName } from "@/lib/tasks/format";
 
 export const dynamic = "force-dynamic";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 /* Alfred's conversation endpoint — the user talks to Alfred and he answers.
-   READ-ONLY: each turn fetches the same live data the Bridge shows and injects
-   a compact summary into the system prompt, so Alfred can answer "what's
-   overdue?", "what's my day?", "summarise my inbox", "how's LinkedIn?". He
-   advises and answers; he never performs actions yet. The Anthropic key stays
-   server-side and is never exposed to the browser. */
+   Each turn fetches the same live data the Bridge shows and injects a compact
+   summary into the system prompt. Alfred can also ACT via a small whitelist of
+   tools (Anthropic tool-use): navigate (safe, immediate) and create_task /
+   set_task_status (proposals the CLIENT confirms before executing). The route
+   never performs data changes itself — it only relays the proposed tool calls
+   plus a resolution directory (real teammates + open tasks) so the client can
+   resolve names/titles and confirm. The Anthropic key stays server-side. */
+
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: "navigate",
+    description:
+      "Take the user to a section of the SwissWiper dashboard. Use when they ask to go to / open / show a section. This is safe and immediate — no confirmation needed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        destination: {
+          type: "string",
+          enum: ["overview", "tasks", "calendar", "emails", "marketing", "bridge"],
+          description: "Which section to open.",
+        },
+      },
+      required: ["destination"],
+    },
+  },
+  {
+    name: "create_task",
+    description:
+      "PROPOSE creating a new task on the shared team to-do list. This is only a proposal — the app shows the user a confirmation before anything is created, so phrase your spoken reply as a proposal, not as done. Only set assigneeName to a real teammate from the roster; if you're unsure who is meant, ask instead of guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "The task title." },
+        assigneeName: {
+          type: "string",
+          description: "First or full name of a real teammate to assign. Omit if not specified.",
+        },
+        dueDate: {
+          type: "string",
+          description: "Absolute due date as YYYY-MM-DD. Convert relative dates (e.g. 'Friday') yourself. Omit if none.",
+        },
+        priority: { type: "string", enum: ["low", "normal", "high"] },
+        visibility: { type: "string", enum: ["team", "personal", "founders"] },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "set_task_status",
+    description:
+      "PROPOSE changing the status of an existing task (e.g. mark it done). Only a proposal — the app confirms with the user before applying it. Match taskTitleOrId to one of the user's open tasks listed in the briefing; if none matches, ask which task they mean instead of guessing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        taskTitleOrId: { type: "string", description: "The exact title (or id) of an existing task." },
+        status: { type: "string", enum: ["todo", "in_progress", "done"] },
+      },
+      required: ["taskTitleOrId", "status"],
+    },
+  },
+];
+
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -64,7 +122,10 @@ export async function POST(req: Request) {
   const meta = (user.user_metadata ?? {}) as Record<string, string | undefined>;
   const firstName = (meta.full_name ?? meta.name ?? user.email ?? "there").split(" ")[0] || "there";
 
-  const context = await buildContext(timeZone);
+  // Fetch tasks once — used for the briefing AND the resolution directory.
+  const tasksData = await getTasksData().catch(() => null);
+  const directory = buildDirectory(tasksData);
+  const context = await buildContext(timeZone, tasksData, directory);
 
   const nowLabel = new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -74,6 +135,7 @@ export async function POST(req: Request) {
     day: "numeric",
     month: "long",
   }).format(new Date());
+  const todayIso = dateKeyInTz(new Date(), timeZone);
 
   const system = `You are Alfred — a refined, calm, dry-witted British butler in the spirit of Alfred Pennyworth. You are ${firstName}'s personal assistant on the SwissWiper performance platform.
 
@@ -81,7 +143,12 @@ Manner: warm, loyal, understated. A light, dry wit — never slapstick. Address 
 
 This is spoken aloud, so keep replies short — usually one or two sentences. Lead with the answer. Don't read out long lists unless asked; summarise instead. No markdown, bullet points, or emoji — just plain spoken English.
 
-You are READ-ONLY for now: you can answer questions, summarise, and advise, but you cannot yet take actions (sending mail, creating tasks, moving meetings). If asked to do something, say you'll be able to once actions are enabled, and offer the relevant information instead.
+Marketing: the LinkedIn figures in the briefing ARE the marketing performance data. When ${firstName} asks "how's marketing?", answer from those LinkedIn numbers.
+
+You can take a few actions through tools:
+- navigate(destination): take ${firstName} to a section. This is immediate — when you navigate, give a brief spoken confirmation like "Right away — taking you to Marketing."
+- create_task and set_task_status: these are PROPOSALS only. The app will ask ${firstName} to confirm before anything changes, so phrase your spoken line as a proposal ("Shall I create…?") — never claim it's already done. Only assign real teammates from the roster below; if you're unsure who or which task is meant, ask rather than guess. For due dates, pass an absolute YYYY-MM-DD (today is ${todayIso}).
+- You cannot yet send emails or change the calendar — if asked, say that's coming soon and offer the relevant information instead.
 
 Base your answers on the live briefing below. If something isn't in it, say so plainly rather than inventing it. It is currently ${nowLabel} (${timeZone}).
 
@@ -94,14 +161,30 @@ ${context}`;
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
       system,
+      tools: TOOLS,
       messages: clean,
     });
+
     const reply = resp.content
       .map((b) => (b.type === "text" ? b.text : ""))
       .join(" ")
       .trim();
+
+    const actions = resp.content
+      .filter((b) => b.type === "tool_use")
+      .map((b) => {
+        const tb = b as { id: string; name: string; input: unknown };
+        return { id: tb.id, name: tb.name, input: (tb.input ?? {}) as Record<string, unknown> };
+      });
+
+    const needsDirectory = actions.some(
+      (a) => a.name === "create_task" || a.name === "set_task_status",
+    );
+
     return NextResponse.json({
-      reply: reply || "I'm afraid I didn't quite catch that, sir. Could you say it again?",
+      reply: reply || (actions.length ? "" : "I'm afraid I didn't quite catch that. Could you say it again?"),
+      actions,
+      directory: needsDirectory ? directory : undefined,
     });
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -113,16 +196,38 @@ ${context}`;
   }
 }
 
-/* ── Live data summary (read-only) ─────────────────────────────────────── */
+/* ── Resolution directory (real teammates + open tasks) ────────────────── */
 
-async function buildContext(timeZone: string): Promise<string> {
+type Directory = {
+  profiles: { id: string; name: string; first: string }[];
+  openTasks: { id: string; title: string }[];
+};
+
+function buildDirectory(tasksData: TasksData | null): Directory {
+  const profiles = (tasksData?.profiles ?? []).map((p) => {
+    const name = displayName(p.full_name, p.email);
+    return { id: p.id, name, first: name.split(" ")[0] };
+  });
+  const openTasks = (tasksData?.tasks ?? [])
+    .filter((t) => !t.deleted_at && t.status !== "done")
+    .map((t) => ({ id: t.id, title: t.title }));
+  return { profiles, openTasks };
+}
+
+/* ── Live data summary ─────────────────────────────────────────────────── */
+
+async function buildContext(
+  timeZone: string,
+  tasksData: TasksData | null,
+  directory: Directory,
+): Promise<string> {
   const lines: string[] = [];
   const now = new Date();
   const todayKey = dateKeyInTz(now, timeZone);
 
   // Tasks (the signed-in user's open tasks).
-  try {
-    const { tasks, userId } = await getTasksData();
+  if (tasksData) {
+    const { tasks, userId } = tasksData;
     const mine = tasks.filter(
       (t) =>
         !t.deleted_at &&
@@ -142,8 +247,14 @@ async function buildContext(timeZone: string): Promise<string> {
     );
     if (overdue.length) lines.push(`Overdue: ${overdue.slice(0, 6).map((t) => t.title).join("; ")}.`);
     if (dueToday.length) lines.push(`Due today: ${dueToday.slice(0, 6).map((t) => t.title).join("; ")}.`);
-  } catch {
-    /* tasks unavailable */
+  }
+
+  // Roster + open task titles — so Alfred matches real names/titles for actions.
+  if (directory.profiles.length) {
+    lines.push(`Team: ${directory.profiles.map((p) => p.name).join(", ")}.`);
+  }
+  if (directory.openTasks.length) {
+    lines.push(`Open tasks: ${directory.openTasks.slice(0, 12).map((t) => t.title).join("; ")}.`);
   }
 
   // Gmail + Calendar (only when Google is connected).
@@ -181,17 +292,18 @@ async function buildContext(timeZone: string): Promise<string> {
     lines.push("Gmail and Calendar aren't connected, so I have no email or calendar data right now.");
   }
 
-  // Marketing pulse (LinkedIn — latest export, falls back to seed).
+  // Marketing pulse (LinkedIn — latest export, always falls back to seed so it
+  // loads reliably each turn). These figures ARE the marketing data.
   try {
     const { metrics: li } = await getLinkedInMetrics();
     const agg = windowAgg(li, 365);
     lines.push(
-      `LinkedIn (last 365 days): ${li.followersAllTime.toLocaleString()} followers, ${agg.impressions.toLocaleString()} impressions, ${(
+      `Marketing (LinkedIn, last 365 days): ${li.followersAllTime.toLocaleString()} followers, ${agg.impressions.toLocaleString()} impressions, ${(
         agg.engagementRate * 100
       ).toFixed(1)}% engagement.`,
     );
   } catch {
-    /* marketing unavailable */
+    lines.push("Marketing (LinkedIn) figures are momentarily unavailable.");
   }
 
   return lines.length ? lines.join("\n") : "No live data is available at the moment.";
