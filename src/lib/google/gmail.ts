@@ -57,6 +57,7 @@ export type EmailThread = {
   id: string;
   threadId: string;
   senderName: string;
+  senderEmail: string; // parsed From address (for reply prefill)
   subject: string;
   snippet: string; // one-line body preview from Gmail
   dateISO: string; // received time (formatted on the client)
@@ -142,6 +143,7 @@ function toThread(msg: GmailMessage, myEmail: string): EmailThread {
     id: msg.id,
     threadId: msg.threadId,
     senderName: name,
+    senderEmail: email,
     subject: header(msg, "Subject") || "(no subject)",
     snippet: decodeEntities(msg.snippet ?? ""),
     dateISO: isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString(),

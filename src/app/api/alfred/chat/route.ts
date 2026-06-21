@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleAccessToken } from "@/lib/google/tokens";
-import { getInboxView } from "@/lib/google/gmail";
+import { getInboxView, type InboxView } from "@/lib/google/gmail";
 import { getCalendarData, type CalEventRaw } from "@/lib/google/calendar";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { windowAgg } from "@/lib/linkedin/compute";
@@ -12,28 +12,28 @@ import { displayName } from "@/lib/tasks/format";
 export const dynamic = "force-dynamic";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type CalendarData = { events: CalEventRaw[] };
 
-/* Alfred's conversation endpoint — the user talks to Alfred and he answers.
-   Each turn fetches the same live data the Bridge shows and injects a compact
-   summary into the system prompt. Alfred can also ACT via a small whitelist of
-   tools (Anthropic tool-use): navigate (safe, immediate) and create_task /
-   set_task_status (proposals the CLIENT confirms before executing). The route
-   never performs data changes itself — it only relays the proposed tool calls
-   plus a resolution directory (real teammates + open tasks) so the client can
-   resolve names/titles and confirm. The Anthropic key stays server-side. */
+/* Alfred's conversation endpoint. Each turn fetches the live data the Bridge
+   shows and injects a compact summary into the system prompt. Alfred can ACT via
+   a whitelist of tools (Anthropic tool-use): navigate (safe, immediate), task
+   create/mark-done, Gmail draft/send, and calendar create/reschedule/cancel.
+   The route NEVER changes data itself — it relays the proposed tool calls plus a
+   resolution directory (teammates, open tasks, recent emails, upcoming events)
+   so the CLIENT can resolve refs and confirm before executing. Key stays
+   server-side. */
 
 const TOOLS: Anthropic.Tool[] = [
   {
     name: "navigate",
     description:
-      "Take the user to a section of the SwissWiper dashboard. Use when they ask to go to / open / show a section. This is safe and immediate — no confirmation needed.",
+      "Take the user to a section of the SwissWiper dashboard. Use when they ask to go to / open / show a section. Safe and immediate — no confirmation needed.",
     input_schema: {
       type: "object",
       properties: {
         destination: {
           type: "string",
           enum: ["overview", "tasks", "calendar", "emails", "marketing", "bridge"],
-          description: "Which section to open.",
         },
       },
       required: ["destination"],
@@ -42,21 +42,13 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "create_task",
     description:
-      "PROPOSE creating a new task on the shared team to-do list. This is only a proposal — the app shows the user an editable review before anything is created, so phrase your spoken reply as a proposal, not as done. A task may involve several people: list every teammate in assigneeNames. Only use real teammates from the roster; if you're unsure who is meant, ask instead of guessing.",
+      "PROPOSE creating a task on the shared team to-do. Only a proposal — the app shows an editable review and confirms before creating. List every teammate in assigneeNames (real names from the roster only); if unsure who, ask.",
     input_schema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "The task title." },
-        assigneeNames: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "First or full names of real teammates to assign (one or more). Omit if not specified.",
-        },
-        dueDate: {
-          type: "string",
-          description: "Absolute due date as YYYY-MM-DD. Convert relative dates (e.g. 'Friday') yourself. Omit if none.",
-        },
+        title: { type: "string" },
+        assigneeNames: { type: "array", items: { type: "string" } },
+        dueDate: { type: "string", description: "Absolute YYYY-MM-DD. Convert relative dates yourself." },
         priority: { type: "string", enum: ["low", "normal", "high"] },
         visibility: { type: "string", enum: ["team", "personal", "founders"] },
       },
@@ -66,14 +58,98 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "set_task_status",
     description:
-      "PROPOSE changing the status of an existing task (e.g. mark it done). Only a proposal — the app confirms with the user before applying it. Match taskTitleOrId to one of the user's open tasks listed in the briefing; if none matches, ask which task they mean instead of guessing.",
+      "PROPOSE changing an existing task's status (e.g. mark done). Only a proposal — the app confirms. Match taskTitleOrId to one of the open tasks in the briefing; if none matches, ask.",
     input_schema: {
       type: "object",
       properties: {
-        taskTitleOrId: { type: "string", description: "The exact title (or id) of an existing task." },
+        taskTitleOrId: { type: "string" },
         status: { type: "string", enum: ["todo", "in_progress", "done"] },
       },
       required: ["taskTitleOrId", "status"],
+    },
+  },
+  {
+    name: "draft_reply",
+    description:
+      "PROPOSE a reply to an email, saved as a DRAFT in Gmail (never sent). The app shows an editable review and confirms before drafting. Match emailRef to one of the recent emails in the briefing (by sender and/or subject); if unsure which, ask.",
+    input_schema: {
+      type: "object",
+      properties: {
+        emailRef: { type: "string", description: "Which email to reply to — the sender and/or subject." },
+        body: { type: "string", description: "The reply text." },
+      },
+      required: ["emailRef", "body"],
+    },
+  },
+  {
+    name: "draft_email",
+    description:
+      "PROPOSE a brand-new email, saved as a DRAFT in Gmail (never sent). The app shows an editable review and confirms before drafting.",
+    input_schema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Recipient — an email address, or a teammate's name." },
+        subject: { type: "string" },
+        body: { type: "string" },
+      },
+      required: ["to", "body"],
+    },
+  },
+  {
+    name: "send_email",
+    description:
+      "SEND an email (not a draft). Use ONLY when the user clearly says to send it. Still a proposal — the app confirms with a distinct Send step. Default to drafting; do not use this unless sending is explicit. Provide emailRef to send a reply to that email, or to/subject for a new message.",
+    input_schema: {
+      type: "object",
+      properties: {
+        emailRef: { type: "string", description: "Reply target (sender/subject) if sending a reply." },
+        to: { type: "string" },
+        subject: { type: "string" },
+        body: { type: "string" },
+      },
+      required: ["body"],
+    },
+  },
+  {
+    name: "create_event",
+    description:
+      "PROPOSE a new calendar event on the primary calendar. Only a proposal — the app shows an editable review and confirms. Times are ISO 8601 local in the user's timezone, e.g. 2026-06-22T15:00.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        start: { type: "string", description: "Start, ISO 8601 local (e.g. 2026-06-22T15:00)." },
+        end: { type: "string", description: "End, ISO 8601 local. If omitted, default to one hour after start." },
+        attendees: { type: "array", items: { type: "string" }, description: "Emails or teammate names." },
+        description: { type: "string" },
+      },
+      required: ["title", "start"],
+    },
+  },
+  {
+    name: "reschedule_event",
+    description:
+      "PROPOSE moving an existing event. Only a proposal — the app confirms. Match eventRef to one of the upcoming events in the briefing (by title/time); if unsure, ask. Times are ISO 8601 local.",
+    input_schema: {
+      type: "object",
+      properties: {
+        eventRef: { type: "string", description: "Which event — its title and/or time." },
+        newStart: { type: "string", description: "New start, ISO 8601 local." },
+        newEnd: { type: "string", description: "New end, ISO 8601 local. Optional — keeps the duration if omitted." },
+      },
+      required: ["eventRef", "newStart"],
+    },
+  },
+  {
+    name: "cancel_event",
+    description:
+      "PROPOSE cancelling (deleting) an existing event. Only a proposal — the app shows a clear confirm. Match eventRef to one of the upcoming events; if unsure, ask.",
+    input_schema: {
+      type: "object",
+      properties: {
+        eventRef: { type: "string", description: "Which event — its title and/or time." },
+      },
+      required: ["eventRef"],
     },
   },
 ];
@@ -81,10 +157,7 @@ const TOOLS: Anthropic.Tool[] = [
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "Alfred isn't configured yet — no API key set." },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: "Alfred isn't configured yet — no API key set." }, { status: 503 });
   }
 
   let body: { messages?: ChatMessage[]; timeZone?: string };
@@ -94,10 +167,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "I couldn't read that." }, { status: 400 });
   }
 
-  const timeZone =
-    typeof body.timeZone === "string" && body.timeZone ? body.timeZone : "UTC";
+  const timeZone = typeof body.timeZone === "string" && body.timeZone ? body.timeZone : "UTC";
 
-  // Sanitise + bound the conversation. Keep the last 20 turns, trim each.
   const clean: ChatMessage[] = (Array.isArray(body.messages) ? body.messages : [])
     .filter(
       (m): m is ChatMessage =>
@@ -113,7 +184,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "There's nothing to respond to." }, { status: 400 });
   }
 
-  // Must be signed in (Alfred only knows the signed-in person's data).
   const supabase = await createClient();
   const {
     data: { user },
@@ -124,10 +194,26 @@ export async function POST(req: Request) {
   const meta = (user.user_metadata ?? {}) as Record<string, string | undefined>;
   const firstName = (meta.full_name ?? meta.name ?? user.email ?? "there").split(" ")[0] || "there";
 
-  // Fetch tasks once — used for the briefing AND the resolution directory.
+  // Fetch live data once — used for both the briefing and the resolution directory.
   const tasksData = await getTasksData().catch(() => null);
-  const directory = buildDirectory(tasksData);
-  const context = await buildContext(timeZone, tasksData, directory);
+  const token = await getGoogleAccessToken();
+  let inbox: InboxView | null = null;
+  let calendar: CalendarData | null = null;
+  if (token) {
+    try {
+      inbox = await getInboxView(token);
+    } catch {
+      /* inbox unavailable */
+    }
+    try {
+      calendar = await getCalendarData(token);
+    } catch {
+      /* calendar unavailable */
+    }
+  }
+
+  const directory = buildDirectory(tasksData, inbox, calendar, user.email ?? "");
+  const context = await buildContext(timeZone, tasksData, directory, inbox, calendar);
 
   const nowLabel = new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -141,18 +227,21 @@ export async function POST(req: Request) {
 
   const system = `You are Alfred — a refined, calm, dry-witted British butler in the spirit of Alfred Pennyworth. You are ${firstName}'s personal assistant on the SwissWiper performance platform.
 
-Manner: warm, loyal, understated. A light, dry wit — never slapstick. Address ${firstName} by first name now and then, not every line. You are unflappable and precise.
+Manner: warm, loyal, understated. A light, dry wit — never slapstick. Address ${firstName} by first name now and then. Unflappable and precise.
 
-This is spoken aloud, so keep replies short — usually one or two sentences. Lead with the answer. Don't read out long lists unless asked; summarise instead. No markdown, bullet points, or emoji — just plain spoken English.
+This is spoken aloud, so keep replies short — usually one or two sentences. Lead with the answer. No markdown, bullet points, or emoji — plain spoken English.
 
-Marketing: the LinkedIn figures in the briefing ARE the marketing performance data. When ${firstName} asks "how's marketing?", answer from those LinkedIn numbers.
+Marketing: the LinkedIn figures in the briefing ARE the marketing performance data — answer "how's marketing?" from them.
 
-You can take a few actions through tools:
-- navigate(destination): take ${firstName} to a section. This is immediate — when you navigate, give a brief spoken confirmation like "Right away — taking you to Marketing."
-- create_task and set_task_status: these are PROPOSALS only. The app will let ${firstName} review/edit and confirm before anything changes, so phrase your spoken line as a proposal ("Shall I create…?") — never claim it's already done. A task can involve several people — put every teammate in assigneeNames. Only use real teammates from the roster below; if you're unsure who or which task is meant, ask rather than guess. For due dates, pass an absolute YYYY-MM-DD (today is ${todayIso}).
-- You cannot yet send emails or change the calendar — if asked, say that's coming soon and offer the relevant information instead.
+You can take actions through tools. ALL of them except navigate are PROPOSALS: the app shows ${firstName} an editable review and he confirms (or says "yes") before anything happens — so phrase your spoken line as a proposal ("Shall I…?", "I've drafted…"), never as already done.
+- navigate(destination): immediate; give a brief spoken confirmation.
+- create_task / set_task_status: the team to-do. Real teammates only (roster below); absolute YYYY-MM-DD due dates (today is ${todayIso}).
+- draft_reply / draft_email: compose email saved as a DRAFT in Gmail — you do NOT send. After confirming, say "I've drafted it in your Gmail." Match emailRef to a recent email below.
+- send_email: actually SENDS — use ONLY when ${firstName} clearly says to send it. Default to drafting; the app confirms sending separately.
+- create_event / reschedule_event / cancel_event: the primary calendar. Times are ISO 8601 local in ${firstName}'s timezone (e.g. 2026-06-22T15:00). Match eventRef to an upcoming event below. Cancelling needs a clear confirm.
+If you're unsure which person, email, task, or event is meant, ASK rather than guess. If Gmail/Calendar isn't connected, say so.
 
-Base your answers on the live briefing below. If something isn't in it, say so plainly rather than inventing it. It is currently ${nowLabel} (${timeZone}).
+Base answers on the live briefing below; if something isn't there, say so plainly. It is currently ${nowLabel} (${timeZone}).
 
 — Live briefing for ${firstName} —
 ${context}`;
@@ -179,14 +268,12 @@ ${context}`;
         return { id: tb.id, name: tb.name, input: (tb.input ?? {}) as Record<string, unknown> };
       });
 
-    const needsDirectory = actions.some(
-      (a) => a.name === "create_task" || a.name === "set_task_status",
-    );
-
     return NextResponse.json({
       reply: reply || (actions.length ? "" : "I'm afraid I didn't quite catch that. Could you say it again?"),
       actions,
-      directory: needsDirectory ? directory : undefined,
+      // Always include the directory so the client can resolve names/refs in
+      // any context (Bridge or summon overlay).
+      directory,
     });
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -198,23 +285,60 @@ ${context}`;
   }
 }
 
-/* ── Resolution directory (real teammates + open tasks) ────────────────── */
+/* ── Resolution directory ──────────────────────────────────────────────── */
 
 type Directory = {
-  profiles: { id: string; name: string; first: string }[];
+  profiles: { id: string; name: string; first: string; email: string }[];
   openTasks: { id: string; title: string }[];
+  emails: { ref: string; messageId: string; from: string; fromEmail: string; subject: string }[];
+  events: { ref: string; id: string; title: string; start: string; end: string; when: string }[];
+  userEmail: string;
   userRole: "member" | "founder";
 };
 
-function buildDirectory(tasksData: TasksData | null): Directory {
+function buildDirectory(
+  tasksData: TasksData | null,
+  inbox: InboxView | null,
+  calendar: CalendarData | null,
+  userEmail: string,
+): Directory {
   const profiles = (tasksData?.profiles ?? []).map((p) => {
     const name = displayName(p.full_name, p.email);
-    return { id: p.id, name, first: name.split(" ")[0] };
+    return { id: p.id, name, first: name.split(" ")[0], email: p.email ?? "" };
   });
   const openTasks = (tasksData?.tasks ?? [])
     .filter((t) => !t.deleted_at && t.status !== "done")
     .map((t) => ({ id: t.id, title: t.title }));
-  return { profiles, openTasks, userRole: tasksData?.userRole ?? "member" };
+
+  const emails = (inbox?.threads ?? []).slice(0, 12).map((t) => ({
+    ref: t.id,
+    messageId: t.id,
+    from: t.senderName,
+    fromEmail: t.senderEmail,
+    subject: t.subject,
+  }));
+
+  const now = Date.now();
+  const events = (calendar?.events ?? [])
+    .filter((e) => e.startDateTime && Date.parse(e.startDateTime) > now - 3_600_000)
+    .sort((a, b) => Date.parse(a.startDateTime!) - Date.parse(b.startDateTime!))
+    .slice(0, 12)
+    .map((e) => ({
+      ref: e.id,
+      id: e.id,
+      title: e.title,
+      start: e.startDateTime!,
+      end: e.endDateTime ?? e.startDateTime!,
+      when: new Intl.DateTimeFormat("en-GB", {
+        weekday: "short",
+        hour: "numeric",
+        minute: "2-digit",
+        day: "numeric",
+        month: "short",
+      }).format(new Date(e.startDateTime!)),
+    }));
+
+  return { profiles, openTasks, emails, events, userEmail, userRole: tasksData?.userRole ?? "member" };
 }
 
 /* ── Live data summary ─────────────────────────────────────────────────── */
@@ -223,12 +347,13 @@ async function buildContext(
   timeZone: string,
   tasksData: TasksData | null,
   directory: Directory,
+  inbox: InboxView | null,
+  calendar: CalendarData | null,
 ): Promise<string> {
   const lines: string[] = [];
   const now = new Date();
   const todayKey = dateKeyInTz(now, timeZone);
 
-  // Tasks (the signed-in user's open tasks).
   if (tasksData) {
     const { tasks, userId } = tasksData;
     const mine = tasks.filter(
@@ -237,12 +362,8 @@ async function buildContext(
         t.status !== "done" &&
         (t.created_by === userId || t.assignees.includes(userId ?? "")),
     );
-    const overdue = mine.filter(
-      (t) => t.due_at && dateKeyInTz(new Date(t.due_at), timeZone) < todayKey,
-    );
-    const dueToday = mine.filter(
-      (t) => t.due_at && dateKeyInTz(new Date(t.due_at), timeZone) === todayKey,
-    );
+    const overdue = mine.filter((t) => t.due_at && dateKeyInTz(new Date(t.due_at), timeZone) < todayKey);
+    const dueToday = mine.filter((t) => t.due_at && dateKeyInTz(new Date(t.due_at), timeZone) === todayKey);
     lines.push(
       `Tasks: ${mine.length} open${overdue.length ? `, ${overdue.length} overdue` : ""}${
         dueToday.length ? `, ${dueToday.length} due today` : ""
@@ -252,7 +373,6 @@ async function buildContext(
     if (dueToday.length) lines.push(`Due today: ${dueToday.slice(0, 6).map((t) => t.title).join("; ")}.`);
   }
 
-  // Roster + open task titles — so Alfred matches real names/titles for actions.
   if (directory.profiles.length) {
     lines.push(`Team: ${directory.profiles.map((p) => p.name).join(", ")}.`);
   }
@@ -260,43 +380,39 @@ async function buildContext(
     lines.push(`Open tasks: ${directory.openTasks.slice(0, 12).map((t) => t.title).join("; ")}.`);
   }
 
-  // Gmail + Calendar (only when Google is connected).
-  const token = await getGoogleAccessToken();
-  if (token) {
-    try {
-      const inbox = await getInboxView(token);
+  if (inbox) {
+    lines.push(
+      `Inbox: ${inbox.unread} unread, ${inbox.needAttention} needing attention, ${inbox.awaitingReply} awaiting a reply, ${inbox.week} received this week.`,
+    );
+    if (directory.emails.length) {
       lines.push(
-        `Inbox: ${inbox.unread} unread, ${inbox.needAttention} needing attention, ${inbox.awaitingReply} awaiting a reply, ${inbox.week} received this week.`,
+        `Recent emails: ${directory.emails
+          .slice(0, 8)
+          .map((e) => `${e.from} — ${e.subject}`)
+          .join("; ")}.`,
       );
-    } catch {
-      /* inbox unavailable */
-    }
-    try {
-      const { events } = await getCalendarData(token);
-      const todays = events.filter((e) => e.isMeeting && meetingDayKey(e, timeZone) === todayKey);
-      const next = events
-        .filter((e) => e.isMeeting && e.startDateTime && Date.parse(e.startDateTime) > now.getTime())
-        .sort((a, b) => Date.parse(a.startDateTime!) - Date.parse(b.startDateTime!))[0];
-      let cal = `Calendar today: ${todays.length} meeting${todays.length === 1 ? "" : "s"}.`;
-      if (next) cal += ` Next: ${next.title} at ${timeInTz(next, timeZone)}.`;
-      lines.push(cal);
-      if (todays.length) {
-        lines.push(
-          `Today's meetings: ${todays
-            .slice(0, 6)
-            .map((e) => `${e.title} (${timeInTz(e, timeZone)})`)
-            .join("; ")}.`,
-        );
-      }
-    } catch {
-      /* calendar unavailable */
     }
   } else {
-    lines.push("Gmail and Calendar aren't connected, so I have no email or calendar data right now.");
+    lines.push("Gmail isn't connected, so I have no email data right now.");
   }
 
-  // Marketing pulse (LinkedIn — latest export, always falls back to seed so it
-  // loads reliably each turn). These figures ARE the marketing data.
+  if (calendar) {
+    const todays = (calendar.events ?? []).filter(
+      (e) => e.isMeeting && meetingDayKey(e, timeZone) === todayKey,
+    );
+    lines.push(`Calendar today: ${todays.length} meeting${todays.length === 1 ? "" : "s"}.`);
+    if (directory.events.length) {
+      lines.push(
+        `Upcoming events: ${directory.events
+          .slice(0, 8)
+          .map((e) => `${e.title} (${e.when})`)
+          .join("; ")}.`,
+      );
+    }
+  } else {
+    lines.push("Calendar isn't connected, so I have no calendar data right now.");
+  }
+
   try {
     const { metrics: li } = await getLinkedInMetrics();
     const agg = windowAgg(li, 365);
@@ -312,7 +428,6 @@ async function buildContext(
   return lines.length ? lines.join("\n") : "No live data is available at the moment.";
 }
 
-/* YYYY-MM-DD for an instant in a given IANA timezone (string-comparable). */
 function dateKeyInTz(d: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -326,13 +441,4 @@ function meetingDayKey(e: CalEventRaw, timeZone: string): string {
   if (e.allDayStart) return e.allDayStart;
   if (e.startDateTime) return dateKeyInTz(new Date(e.startDateTime), timeZone);
   return "";
-}
-
-function timeInTz(e: CalEventRaw, timeZone: string): string {
-  if (!e.startDateTime) return "all day";
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(e.startDateTime));
 }
