@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AlfredOverlay from "@/components/bridge/AlfredOverlay";
+import { unlockAudio } from "@/lib/bridge/voice";
 
 /* Makes Alfred reachable from every dashboard page. Lives in the dashboard
    layout, so it (and the overlay's conversation) persists across in-dashboard
@@ -52,6 +53,7 @@ export default function AlfredSummon() {
   const close = useCallback(() => setOpen(false), []);
 
   function toggleWake() {
+    unlockAudio(); // user gesture — unlock ElevenLabs playback for later
     setWake((v) => {
       const next = !v;
       try {
@@ -68,6 +70,7 @@ export default function AlfredSummon() {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === ".") {
         e.preventDefault();
+        unlockAudio(); // key press is a gesture — unlock playback
         setOpen((o) => !o);
       }
     }
@@ -163,7 +166,10 @@ export default function AlfredSummon() {
 
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            unlockAudio(); // click is a gesture — unlock ElevenLabs playback
+            setOpen(true);
+          }}
           aria-label="Summon Alfred"
           title="Summon Alfred  ·  Ctrl/⌘ + ."
           className="group relative grid h-12 w-12 place-items-center rounded-full bg-surface text-peri-deep shadow-[var(--shadow-card)] ring-1 ring-hairline transition-all hover:scale-105 hover:shadow-[var(--shadow-card-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-peri-deep/40"

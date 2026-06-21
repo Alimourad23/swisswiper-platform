@@ -6,7 +6,7 @@ import AlfredStar from "@/components/bridge/AlfredStar";
 import StarfieldCanvas from "@/components/bridge/StarfieldCanvas";
 import AlfredChat from "@/components/bridge/AlfredChat";
 import { composeBriefing, type BridgeData } from "@/lib/bridge/briefing";
-import { speak, stopSpeaking } from "@/lib/bridge/voice";
+import { speak, stopSpeaking, unlockAudio } from "@/lib/bridge/voice";
 
 /* THE BRIDGE — the post-login welcome. A calm deep-space canvas that is just
    Alfred, a living star, who greets the user by name and speaks a live briefing
@@ -77,6 +77,7 @@ export default function Bridge({ data }: { data: BridgeData }) {
     }
 
     function onGesture() {
+      unlockAudio(); // first interaction unlocks ElevenLabs playback
       speakNow();
     }
 

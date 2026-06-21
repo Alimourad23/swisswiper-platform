@@ -45,6 +45,7 @@ export default function AlfredStar({
     let size = 0;
     let dpr = 1;
     let R = 0;
+    let paused = false;
     let k = 0; // speaking intensity, eased toward target
     let l = 0; // listening intensity, eased toward targetListen
     let angA = 0;
@@ -218,8 +219,37 @@ export default function AlfredStar({
       ctx.fill();
 
       ctx.restore();
-      raf = requestAnimationFrame(frame);
+      if (!paused) raf = requestAnimationFrame(frame);
     }
+
+    // Pause the rAF loop when the tab is hidden or the star is off-screen.
+    let onScreen = true;
+    let hidden = typeof document !== "undefined" && document.hidden;
+    function setPaused(p: boolean) {
+      if (p === paused) return;
+      paused = p;
+      if (p) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else {
+        last = performance.now();
+        if (!raf) raf = requestAnimationFrame(frame);
+      }
+    }
+    const evaluate = () => setPaused(hidden || !onScreen);
+    const onVis = () => {
+      hidden = document.hidden;
+      evaluate();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    const io = new IntersectionObserver(
+      ([e]) => {
+        onScreen = e.isIntersecting;
+        evaluate();
+      },
+      { threshold: 0 },
+    );
+    io.observe(canvas);
 
     resize();
     raf = requestAnimationFrame(frame);
@@ -229,6 +259,8 @@ export default function AlfredStar({
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 

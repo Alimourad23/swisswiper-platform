@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import ModuleHeader from "@/components/ModuleHeader";
 import ConnectState from "@/components/ConnectState";
 import GoogleAuthButton from "@/components/GoogleAuthButton";
@@ -9,25 +10,9 @@ import { getInboxView, type InboxView } from "@/lib/google/gmail";
 
 export const dynamic = "force-dynamic";
 
-export default async function EmailsPage() {
+/* Page shell renders instantly; the slow Gmail fetch streams in via Suspense. */
+export default function EmailsPage() {
   const m = getModule("emails")!;
-  const token = await getGoogleAccessToken();
-
-  let view: InboxView | null = null;
-  let errored = false;
-
-  if (token) {
-    try {
-      view = await getInboxView(token);
-    } catch (e) {
-      errored = true;
-      // eslint-disable-next-line no-console
-      console.error("Gmail fetch failed:", e);
-    }
-  }
-
-  const connected = !!view && !errored;
-
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <ModuleHeader
@@ -41,22 +26,53 @@ export default async function EmailsPage() {
           </div>
         }
       />
+      <Suspense fallback={<BoardSkeleton />}>
+        <EmailsData />
+      </Suspense>
+    </div>
+  );
+}
 
-      {connected ? (
-        <EmailsBoard view={view!} />
-      ) : (
-        <div className="sw-card px-6">
-          <ConnectState
-            icon={m.icon}
-            message={
-              token
-                ? "Reconnect your Google account to grant read-only Gmail access, then your triaged inbox will appear here."
-                : "Connect your Google account with read-only Gmail access to see your triaged inbox."
-            }
-            action={<GoogleAuthButton variant="inline" label="Connect Gmail access" />}
-          />
-        </div>
-      )}
+async function EmailsData() {
+  const m = getModule("emails")!;
+  const token = await getGoogleAccessToken();
+
+  let view: InboxView | null = null;
+  let errored = false;
+  if (token) {
+    try {
+      view = await getInboxView(token);
+    } catch (e) {
+      errored = true;
+      // eslint-disable-next-line no-console
+      console.error("Gmail fetch failed:", e);
+    }
+  }
+
+  if (view && !errored) return <EmailsBoard view={view} />;
+
+  return (
+    <div className="sw-card px-6">
+      <ConnectState
+        icon={m.icon}
+        message={
+          token
+            ? "Reconnect your Google account to grant read-only Gmail access, then your triaged inbox will appear here."
+            : "Connect your Google account with read-only Gmail access to see your triaged inbox."
+        }
+        action={<GoogleAuthButton variant="inline" label="Connect Gmail access" />}
+      />
+    </div>
+  );
+}
+
+function BoardSkeleton() {
+  return (
+    <div className="sw-card flex flex-col gap-3 px-6 py-6">
+      <div className="h-5 w-40 animate-pulse rounded bg-bg" />
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-12 animate-pulse rounded-[var(--radius-control)] bg-bg" />
+      ))}
     </div>
   );
 }

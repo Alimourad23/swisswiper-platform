@@ -18,6 +18,7 @@ export default function StarfieldCanvas() {
     let w = 0;
     let h = 0;
     let dpr = 1;
+    let paused = false;
 
     type Star = {
       x: number;
@@ -77,8 +78,37 @@ export default function StarfieldCanvas() {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(frame);
+      if (!paused) raf = requestAnimationFrame(frame);
     }
+
+    // Pause the rAF loop when the tab is hidden or the canvas is off-screen.
+    let onScreen = true;
+    let hidden = typeof document !== "undefined" && document.hidden;
+    function setPaused(p: boolean) {
+      if (p === paused) return;
+      paused = p;
+      if (p) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else {
+        last = performance.now();
+        if (!raf) raf = requestAnimationFrame(frame);
+      }
+    }
+    const evaluate = () => setPaused(hidden || !onScreen);
+    const onVis = () => {
+      hidden = document.hidden;
+      evaluate();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    const io = new IntersectionObserver(
+      ([e]) => {
+        onScreen = e.isIntersecting;
+        evaluate();
+      },
+      { threshold: 0 },
+    );
+    io.observe(canvas);
 
     resize();
     raf = requestAnimationFrame(frame);
@@ -88,6 +118,8 @@ export default function StarfieldCanvas() {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 

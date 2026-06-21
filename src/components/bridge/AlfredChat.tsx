@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { speak, stopSpeaking } from "@/lib/bridge/voice";
+import { speak, stopSpeaking, unlockAudio } from "@/lib/bridge/voice";
 import { createTask, setStatus } from "@/lib/tasks/actions";
 import { createEmailDraft, createReplyDraft, sendEmail } from "@/lib/google/gmail-actions";
 import { createEvent, rescheduleEvent, cancelEvent } from "@/lib/google/calendar-actions";
@@ -568,6 +568,7 @@ export default function AlfredChat({
   }, [autoListenKey]);
 
   function toggleMic() {
+    unlockAudio(); // this tap is a user gesture — unlock ElevenLabs playback
     if (listening) {
       conversingRef.current = false; // tapping to stop pauses the conversation
       if (recRef.current) {

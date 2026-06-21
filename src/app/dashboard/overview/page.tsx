@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import AlfredOrb from "@/components/AlfredOrb";
 import ConnectState from "@/components/ConnectState";
@@ -18,6 +18,9 @@ import TasksPulse from "@/components/tasks/TasksPulse";
 
 export const dynamic = "force-dynamic";
 
+/* The hero (name + Alfred orb) renders instantly; the data-heavy sections —
+   Gmail, Calendar, LinkedIn, Tasks — are fetched in parallel and streamed in
+   via Suspense so navigating here never blocks on the slow external APIs. */
 export default async function OverviewPage() {
   const supabase = await createClient();
   const {
@@ -27,36 +30,9 @@ export default async function OverviewPage() {
   const fullName = meta.full_name ?? meta.name ?? user?.email ?? "";
   const firstName = fullName.split(" ")[0] || "there";
 
-  // Live Gmail view (null until Google is connected with Gmail access).
-  const token = await getGoogleAccessToken();
-  let gmail: InboxView | null = null;
-  let calendar: Awaited<ReturnType<typeof getCalendarData>> | null = null;
-  if (token) {
-    try {
-      gmail = await getInboxView(token);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("Gmail view failed:", e);
-    }
-    try {
-      calendar = await getCalendarData(token);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("Calendar view failed:", e);
-    }
-  }
-
-  // Live Marketing/LinkedIn headline numbers (from latest export, falls back to seed).
-  const { metrics: li } = await getLinkedInMetrics();
-  const liAgg = windowAgg(li, 365);
-  const liDm = decisionMakerShare(li);
-
-  // Tasks pulse (shared team to-do list).
-  const { tasks, userId } = await getTasksData();
-
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8">
-      {/* Hero */}
+      {/* Hero — instant */}
       <section className="sw-card flex flex-col items-start justify-between gap-8 px-7 py-8 sm:flex-row sm:items-center sm:px-9">
         <div>
           <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
@@ -69,6 +45,30 @@ export default async function OverviewPage() {
         <AlfredOrb firstName={firstName} />
       </section>
 
+      <Suspense fallback={<OverviewSkeleton />}>
+        <OverviewBody />
+      </Suspense>
+    </div>
+  );
+}
+
+async function OverviewBody() {
+  // Fetch the slow sources in parallel (token first, then the rest together).
+  const token = await getGoogleAccessToken();
+  const [gmail, calendar, liResult, tasksResult] = await Promise.all([
+    token ? getInboxView(token).catch(() => null) : Promise.resolve<InboxView | null>(null),
+    token ? getCalendarData(token).catch(() => null) : Promise.resolve(null),
+    getLinkedInMetrics(),
+    getTasksData(),
+  ]);
+
+  const li = liResult.metrics;
+  const liAgg = windowAgg(li, 365);
+  const liDm = decisionMakerShare(li);
+  const { tasks, userId } = tasksResult;
+
+  return (
+    <>
       {/* KPI row — honest: no fake numbers until connected */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Unread email" value={gmail?.unread} />
@@ -188,7 +188,24 @@ export default async function OverviewPage() {
           <SoonTile name="Finance" icon={icons.finance} />
         </div>
       </section>
-    </div>
+    </>
+  );
+}
+
+function OverviewSkeleton() {
+  return (
+    <>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="sw-card h-24 animate-pulse" />
+        ))}
+      </section>
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="sw-card h-56 animate-pulse" />
+        <div className="sw-card h-56 animate-pulse" />
+      </section>
+      <div className="sw-card h-40 animate-pulse" />
+    </>
   );
 }
 
