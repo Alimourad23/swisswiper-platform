@@ -52,8 +52,40 @@ const SEND = /\b(send it|send now|send|fire it off)\b/;
 const SAVE = /\b(save (it|draft|as draft)?|draft it|just draft|keep (it )?as a draft)\b/;
 const AFFIRM = /\b(yes|yeah|yep|yup|confirm|create it|create|go ahead|do it|sure|ok|okay|perfect|looks good|sounds good|that'?s right|aye)\b/;
 const REVISE_WORD = /\b(revise|redraft|re-?draft|rewrite|re-?write|redo|re-?do|not quite)\b/;
-const DISMISS =
-  /\b(that'?s all|that'?ll be all|that is all|dismiss|go away|goodbye|good bye|thank you alfred|thanks alfred|nothing else)\b/;
+
+// End the conversation ONLY when the WHOLE utterance is a dismissal — never on a
+// substring inside a request (so a normal action request never closes Alfred).
+const DISMISS_PHRASES = new Set([
+  "that's all",
+  "thats all",
+  "that'll be all",
+  "thatll be all",
+  "that will be all",
+  "that is all",
+  "that's it",
+  "thats it",
+  "dismiss",
+  "go away",
+  "goodbye",
+  "good bye",
+  "thank you alfred",
+  "thanks alfred",
+  "nothing else",
+  "we're done",
+  "were done",
+  "i'm done",
+  "im done",
+  "all done",
+]);
+function isDismiss(text: string): boolean {
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?,]+$/g, "")
+    .replace(/^(?:ok(?:ay)?|alright|right|well|please)[,\s]+/g, "")
+    .trim();
+  return DISMISS_PHRASES.has(t);
+}
 
 type RecognitionResult = { isFinal: boolean; 0: { transcript: string } };
 type RecognitionEvent = { resultIndex: number; results: ArrayLike<RecognitionResult> };
@@ -502,14 +534,13 @@ export default function AlfredChat({
     let ended = false;
 
     rec.onresult = (e) => {
-      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) finalRef.current += r[0].transcript;
-        else interim += r[0].transcript;
       }
-      // End the conversation promptly the moment the user says "that's all".
-      if (!ended && DISMISS.test(`${finalRef.current} ${interim}`.toLowerCase())) {
+      // End promptly only when the WHOLE finalised utterance is a dismissal
+      // (never on interim noise or a substring inside a request).
+      if (!ended && isDismiss(finalRef.current)) {
         ended = true;
         endConversationRef.current?.();
       }
@@ -531,7 +562,7 @@ export default function AlfredChat({
       }
       if (ended) return; // dismiss already handled in onresult
       const text = finalRef.current.trim();
-      if (text && DISMISS.test(text.toLowerCase())) {
+      if (text && isDismiss(text)) {
         endConversationRef.current?.();
         return;
       }
@@ -859,11 +890,12 @@ function interpretSendEmail(input: Record<string, unknown>, dir: Directory): Int
 }
 
 function interpretCreateEvent(input: Record<string, unknown>): Interpretation {
-  const title = String(input.title ?? "").trim();
-  if (!title) return { error: "I didn't catch the event title." };
-  const start = toLocalInput(String(input.start ?? ""));
-  if (!start) return { error: "I didn't catch a valid start time." };
-  const end = input.end ? toLocalInput(String(input.end)) : addMinutesLocal(start, 60);
+  const title = String(input.title ?? "").trim() || "New event";
+  // Always open the review panel; if the time didn't parse, default to the next
+  // hour so the user can adjust it (better than refusing the action).
+  const start = toLocalInput(String(input.start ?? "")) || nextHourLocal();
+  const endRaw = input.end ? toLocalInput(String(input.end)) : "";
+  const end = endRaw || addMinutesLocal(start, 60);
   const attendees = Array.isArray(input.attendees)
     ? (input.attendees as unknown[]).map((a) => String(a ?? "").trim()).filter(Boolean)
     : [];
@@ -1014,6 +1046,12 @@ function addMinutesLocal(local: string, minutes: number): string {
   const d = new Date(local);
   if (Number.isNaN(d.getTime())) return local;
   d.setMinutes(d.getMinutes() + Math.round(minutes));
+  return formatLocalDateTime(d);
+}
+
+function nextHourLocal(): string {
+  const d = new Date();
+  d.setHours(d.getHours() + 1, 0, 0, 0);
   return formatLocalDateTime(d);
 }
 
