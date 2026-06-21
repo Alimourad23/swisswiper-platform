@@ -19,12 +19,33 @@ const SESSION_KEY = "sw-bridge-session";
 const LAST_KEY = "sw-bridge-briefed-at";
 const FULL_AFTER_MS = 3 * 60 * 60 * 1000;
 
+// Warm, varied butler follow-ups for the calm short state (after engaging /
+// after an action). Some are just the greeting on its own.
+function pickShort(firstName: string): string {
+  const lines = [
+    "",
+    "",
+    `What else would you like to do, ${firstName}?`,
+    `Anything else I can do for you, ${firstName}?`,
+    "How else may I be of service?",
+    "Ready whenever you are.",
+    "At your service.",
+    "What shall we see to next?",
+  ];
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
 export default function Bridge({ data }: { data: BridgeData }) {
   const [now, setNow] = useState<number | null>(null);
   const [mode, setMode] = useState<"full" | "short" | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Once the user engages (taps mic / a panel opens) or an action runs, the
+  // full briefing collapses to a calm short greeting — and never re-reads.
+  const [collapsed, setCollapsed] = useState(false);
+  const [shortLine, setShortLine] = useState("");
+  const prevPanelOpen = useRef(false);
   const spokenRef = useRef(false);
 
   // Device-tz "now" + the full/short decision are only known after mount.
@@ -51,6 +72,28 @@ export default function Bridge({ data }: { data: BridgeData }) {
     () => (now == null || mode == null ? null : composeBriefing(data, now, mode)),
     [data, now, mode],
   );
+
+  // Collapse the full briefing to a calm short greeting the moment the user
+  // engages — so it isn't re-shown after a panel/action closes.
+  useEffect(() => {
+    if ((listening || panelOpen) && !collapsed) {
+      setCollapsed(true);
+      setShortLine(pickShort(data.firstName));
+    }
+  }, [listening, panelOpen, collapsed, data.firstName]);
+
+  // After an action panel closes, freshen the warm short line for variety.
+  useEffect(() => {
+    if (prevPanelOpen.current && !panelOpen) setShortLine(pickShort(data.firstName));
+    prevPanelOpen.current = panelOpen;
+  }, [panelOpen, data.firstName]);
+
+  // What's shown on screen: the full/short briefing until the user engages,
+  // then a calm short greeting (the spoken briefing is unchanged — set once).
+  const view =
+    collapsed && briefing
+      ? { greeting: briefing.greeting, synthesis: shortLine, lines: [] as string[] }
+      : briefing;
 
   // Auto-speak the briefing in Alfred's voice. Audio is blocked before a user
   // gesture, so we speak as soon as we can and otherwise on the first
@@ -122,22 +165,22 @@ export default function Bridge({ data }: { data: BridgeData }) {
             <div
               className={[
                 "mt-2 flex max-w-xl flex-col items-center transition-opacity duration-700",
-                briefing ? "opacity-100" : "opacity-0",
+                view ? "opacity-100" : "opacity-0",
               ].join(" ")}
             >
-          <h1 className="text-2xl font-light tracking-tight text-white sm:text-3xl">
-            {briefing?.greeting ?? " "}
-          </h1>
+              <h1 className="text-2xl font-light tracking-tight text-white sm:text-3xl">
+                {view?.greeting ?? " "}
+              </h1>
 
-          {briefing && (
-            <p className="mt-2.5 text-sm font-light leading-relaxed text-[#cad1e8]/85 sm:text-base">
-              {briefing.synthesis}
-            </p>
-          )}
+              {view?.synthesis && (
+                <p className="mt-2.5 text-sm font-light leading-relaxed text-[#cad1e8]/85 sm:text-base">
+                  {view.synthesis}
+                </p>
+              )}
 
-              {briefing && briefing.lines.length > 0 && (
+              {view && view.lines.length > 0 && (
                 <ul className="mt-4 flex flex-col items-center gap-1.5">
-                  {briefing.lines.map((line, i) => (
+                  {view.lines.map((line, i) => (
                     <li
                       key={i}
                       className="text-xs font-light leading-relaxed tracking-wide text-[#aab2dd]/80 sm:text-sm"

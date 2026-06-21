@@ -153,7 +153,7 @@ export function composeBriefing(
   // ── Spoken text ───────────────────────────────────────────────────────
   // Full briefing opens with Alfred introducing himself, then the updates.
   const spoken = [
-    `${greeting}. This is Alfred, your personal assistant on the SwissWiper platform. Here's where things stand.`,
+    `${greeting}. This is Alfred, your personal assistant on the SwissWiper platform.`,
     synthesis,
     ...lines.map((l) => `${l.replace(/ — /g, ", ")}.`),
     "I'm here if you need me.",
