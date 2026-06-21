@@ -53,38 +53,15 @@ const SAVE = /\b(save (it|draft|as draft)?|draft it|just draft|keep (it )?as a d
 const AFFIRM = /\b(yes|yeah|yep|yup|confirm|create it|create|go ahead|do it|sure|ok|okay|perfect|looks good|sounds good|that'?s right|aye)\b/;
 const REVISE_WORD = /\b(revise|redraft|re-?draft|rewrite|re-?write|redo|re-?do|not quite)\b/;
 
-// End the conversation ONLY when the WHOLE utterance is a dismissal — never on a
-// substring inside a request (so a normal action request never closes Alfred).
-const DISMISS_PHRASES = new Set([
-  "that's all",
-  "thats all",
-  "that'll be all",
-  "thatll be all",
-  "that will be all",
-  "that is all",
-  "that's it",
-  "thats it",
-  "dismiss",
-  "go away",
-  "goodbye",
-  "good bye",
-  "thank you alfred",
-  "thanks alfred",
-  "nothing else",
-  "we're done",
-  "were done",
-  "i'm done",
-  "im done",
-  "all done",
-]);
+// End the conversation when the FINALISED utterance ENDS WITH (or is) a
+// dismissal — so "okay, that's all" / "alfred, that's all" work, but a normal
+// request that merely contains the words mid-sentence does not. Finalised-only
+// (never interim) — see the recognizer.
+const DISMISS_TRAIL =
+  /\b(that'?s all|that'?ll be all|that will be all|that is all|that'?s it|thank(?:s| you)?(?: you)? alfred|nothing else|we'?re done|i'?m done|all done|dismiss|good\s?bye|go away)(?:\s+alfred)?\s*$/i;
 function isDismiss(text: string): boolean {
-  const t = text
-    .trim()
-    .toLowerCase()
-    .replace(/[.!?,]+$/g, "")
-    .replace(/^(?:ok(?:ay)?|alright|right|well|please)[,\s]+/g, "")
-    .trim();
-  return DISMISS_PHRASES.has(t);
+  const t = text.trim().toLowerCase().replace(/[.!?]+$/g, "").trim();
+  return DISMISS_TRAIL.test(t);
 }
 
 type RecognitionResult = { isFinal: boolean; 0: { transcript: string } };
@@ -148,6 +125,7 @@ export default function AlfredChat({
   const activeRef = useRef(active);
   const conversingRef = useRef(false); // in a hands-free conversation
   const stoppingRef = useRef(false); // suppress the next onend auto-continue
+  const tapGoRef = useRef(false); // tapping the mic = "done, go" — submit now
 
   // "Latest" refs so the recognizer's handlers (created in an earlier render)
   // always call the current closures — avoids stale conversation history.
@@ -562,6 +540,8 @@ export default function AlfredChat({
       }
       if (ended) return; // dismiss already handled in onresult
       const text = finalRef.current.trim();
+      const tapGo = tapGoRef.current; // user tapped the mic to submit now
+      tapGoRef.current = false;
       if (text && isDismiss(text)) {
         endConversationRef.current?.();
         return;
@@ -572,6 +552,8 @@ export default function AlfredChat({
         else sendRef.current?.(text);
         return;
       }
+      // Tapped "go" with nothing said → just stop (don't restart).
+      if (tapGo) return;
       // Silence / natural end — restart immediately so a pause never ends the
       // conversation. It only stops on "that's all" / dismiss / deactivate.
       if (activeRef.current && (conversingRef.current || hasPending())) {
@@ -615,16 +597,24 @@ export default function AlfredChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoListenKey]);
 
+  // The mic doubles as a "done — go" button. Tapping while listening ends the
+  // capture and acts immediately: confirm a pending review/action panel, else
+  // submit whatever was just said to Alfred. (Saying nothing just stops.)
   function toggleMic() {
     unlockAudio(); // this tap is a user gesture — unlock ElevenLabs playback
     if (listening) {
-      conversingRef.current = false; // tapping to stop pauses the conversation
-      if (recRef.current) {
-        stoppingRef.current = true;
-        recRef.current.stop();
-      } else {
-        setListening(false);
+      // A panel is already up → confirm/execute its primary action.
+      if (hasPending()) {
+        if (taskRef.current) void submitTask();
+        else if (emailRefState.current) void submitEmailDraft();
+        else if (eventRefState.current) void submitEvent();
+        else if (confirmRef.current) void doConfirm();
+        return;
       }
+      // Otherwise finalise the current speech and submit it (handled in onend).
+      tapGoRef.current = true;
+      if (recRef.current) recRef.current.stop();
+      else setListening(false);
       return;
     }
     if (busy) return;
@@ -659,7 +649,9 @@ export default function AlfredChat({
     : error
       ? ""
       : listening
-        ? "Listening — say “that’s all” when you’re done"
+        ? panelOpen
+          ? "Listening — tap to confirm, or say “that’s all”"
+          : "Listening — tap when done, or say “that’s all”"
         : busy
           ? "One moment…"
           : panelOpen
@@ -738,7 +730,7 @@ export default function AlfredChat({
         type="button"
         onClick={toggleMic}
         disabled={!supported || busy}
-        aria-label={listening ? "Stop listening" : "Talk to Alfred"}
+        aria-label={listening ? "Done — submit" : "Talk to Alfred"}
         aria-pressed={listening}
         className={[
           "group relative grid h-14 w-14 place-items-center rounded-full border transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8e9ae0]/40 disabled:opacity-40",
