@@ -5,7 +5,14 @@
       "PowerShell(npm *)",
       "PowerShell(Move-Item *)",
       "PowerShell(git check-ignore *)",
-      "Bash(node .tmp-b.mts)"
+      "Bash(node .tmp-b.mts)",
+      "Skill(claude-api)",
+      "Bash(git add *)",
+      "Bash(git restore *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(git add *)"
     ]
   }
 }

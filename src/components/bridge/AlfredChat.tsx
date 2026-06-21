@@ -116,6 +116,7 @@ export default function AlfredChat({
 
   const recRef = useRef<Recognition | null>(null);
   const finalRef = useRef("");
+  const interimRef = useRef(""); // latest interim text — fallback if stop() beats Chrome's finalise
   const confirmRef = useRef<Confirm | null>(null);
   const taskRef = useRef<TaskDraft | null>(null);
   const emailRefState = useRef<EmailDraftState | null>(null);
@@ -509,9 +510,16 @@ export default function AlfredChat({
     rec.continuous = true; // keep listening through natural pauses
     rec.maxAlternatives = 1;
     finalRef.current = "";
+    interimRef.current = "";
     let ended = false;
 
     rec.onresult = (e) => {
+      // Rebuild the interim view of the WHOLE utterance every event (final +
+      // not-yet-final), so if a tap/stop() beats Chrome's finalise we still
+      // have the spoken text to fall back on in onend.
+      let interim = "";
+      for (let i = 0; i < e.results.length; i++) interim += e.results[i][0].transcript;
+      interimRef.current = interim;
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) finalRef.current += r[0].transcript;
@@ -539,7 +547,10 @@ export default function AlfredChat({
         return;
       }
       if (ended) return; // dismiss already handled in onresult
-      const text = finalRef.current.trim();
+      // Prefer the finalised transcript; if stop()/a pause beat Chrome's
+      // finalise, fall back to the latest interim so a real request is never
+      // dropped (this was the regression — empty text → silent stop).
+      const text = (finalRef.current.trim() || interimRef.current.trim());
       const tapGo = tapGoRef.current; // user tapped the mic to submit now
       tapGoRef.current = false;
       if (text && isDismiss(text)) {
