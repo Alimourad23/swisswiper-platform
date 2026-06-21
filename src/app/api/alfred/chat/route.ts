@@ -42,14 +42,16 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "create_task",
     description:
-      "PROPOSE creating a new task on the shared team to-do list. This is only a proposal — the app shows the user a confirmation before anything is created, so phrase your spoken reply as a proposal, not as done. Only set assigneeName to a real teammate from the roster; if you're unsure who is meant, ask instead of guessing.",
+      "PROPOSE creating a new task on the shared team to-do list. This is only a proposal — the app shows the user an editable review before anything is created, so phrase your spoken reply as a proposal, not as done. A task may involve several people: list every teammate in assigneeNames. Only use real teammates from the roster; if you're unsure who is meant, ask instead of guessing.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string", description: "The task title." },
-        assigneeName: {
-          type: "string",
-          description: "First or full name of a real teammate to assign. Omit if not specified.",
+        assigneeNames: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "First or full names of real teammates to assign (one or more). Omit if not specified.",
         },
         dueDate: {
           type: "string",
@@ -147,7 +149,7 @@ Marketing: the LinkedIn figures in the briefing ARE the marketing performance da
 
 You can take a few actions through tools:
 - navigate(destination): take ${firstName} to a section. This is immediate — when you navigate, give a brief spoken confirmation like "Right away — taking you to Marketing."
-- create_task and set_task_status: these are PROPOSALS only. The app will ask ${firstName} to confirm before anything changes, so phrase your spoken line as a proposal ("Shall I create…?") — never claim it's already done. Only assign real teammates from the roster below; if you're unsure who or which task is meant, ask rather than guess. For due dates, pass an absolute YYYY-MM-DD (today is ${todayIso}).
+- create_task and set_task_status: these are PROPOSALS only. The app will let ${firstName} review/edit and confirm before anything changes, so phrase your spoken line as a proposal ("Shall I create…?") — never claim it's already done. A task can involve several people — put every teammate in assigneeNames. Only use real teammates from the roster below; if you're unsure who or which task is meant, ask rather than guess. For due dates, pass an absolute YYYY-MM-DD (today is ${todayIso}).
 - You cannot yet send emails or change the calendar — if asked, say that's coming soon and offer the relevant information instead.
 
 Base your answers on the live briefing below. If something isn't in it, say so plainly rather than inventing it. It is currently ${nowLabel} (${timeZone}).
@@ -201,6 +203,7 @@ ${context}`;
 type Directory = {
   profiles: { id: string; name: string; first: string }[];
   openTasks: { id: string; title: string }[];
+  userRole: "member" | "founder";
 };
 
 function buildDirectory(tasksData: TasksData | null): Directory {
@@ -211,7 +214,7 @@ function buildDirectory(tasksData: TasksData | null): Directory {
   const openTasks = (tasksData?.tasks ?? [])
     .filter((t) => !t.deleted_at && t.status !== "done")
     .map((t) => ({ id: t.id, title: t.title }));
-  return { profiles, openTasks };
+  return { profiles, openTasks, userRole: tasksData?.userRole ?? "member" };
 }
 
 /* ── Live data summary ─────────────────────────────────────────────────── */
