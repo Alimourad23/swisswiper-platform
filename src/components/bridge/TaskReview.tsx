@@ -2,15 +2,13 @@
 
 import type { TaskPriority, TaskVisibility } from "@/lib/tasks/types";
 
-/* Editable, prefilled task review shown on the Bridge when Alfred proposes a
-   task. Every field is editable before creating. Dark, on-brand, compact — the
-   only on-screen element while a creation is pending. Confirm by button or by
-   voice ("yes"). */
+/* Editable task FIELDS, rendered inside an ActionPanel (which supplies the card
+   shell + Create/Revise/Cancel buttons). */
 
 export type TaskDraft = {
   title: string;
   assigneeIds: string[];
-  due: string; // YYYY-MM-DD (date input)
+  due: string; // YYYY-MM-DD
   priority: TaskPriority;
   visibility: TaskVisibility;
 };
@@ -18,23 +16,19 @@ export type TaskDraft = {
 type Person = { id: string; name: string; first: string };
 
 const PRIORITIES: TaskPriority[] = ["low", "normal", "high"];
+const inputCls =
+  "w-full rounded-[var(--radius-control)] border border-[#8e9ae0]/25 bg-white/[0.04] px-3 py-2 text-sm text-[#eef1f8] placeholder:text-[#8e9ae0]/40 focus:border-[#8e9ae0]/60 focus:outline-none";
 
 export default function TaskReview({
   draft,
   profiles,
   canFounders,
-  busy,
   onChange,
-  onConfirm,
-  onCancel,
 }: {
   draft: TaskDraft;
   profiles: Person[];
   canFounders: boolean;
-  busy: boolean;
   onChange: (patch: Partial<TaskDraft>) => void;
-  onConfirm: () => void;
-  onCancel: () => void;
 }) {
   const visibilities: TaskVisibility[] = canFounders
     ? ["team", "personal", "founders"]
@@ -49,18 +43,9 @@ export default function TaskReview({
   }
 
   return (
-    <div className="mb-5 flex w-full max-w-md flex-col gap-4 rounded-[var(--radius-card)] border border-[#8e9ae0]/25 bg-white/[0.04] px-5 py-5 text-left">
-      <p className="text-[11px] font-medium uppercase tracking-[0.28em] text-[#8e9ae0]/70">
-        New task — review
-      </p>
-
+    <>
       <Field label="Title">
-        <input
-          value={draft.title}
-          onChange={(e) => onChange({ title: e.target.value })}
-          placeholder="Task title"
-          className="w-full rounded-[var(--radius-control)] border border-[#8e9ae0]/25 bg-white/[0.04] px-3 py-2 text-sm text-[#eef1f8] placeholder:text-[#8e9ae0]/40 focus:border-[#8e9ae0]/60 focus:outline-none"
-        />
+        <input value={draft.title} onChange={(e) => onChange({ title: e.target.value })} placeholder="Task title" className={inputCls} />
       </Field>
 
       <Field label="Assignees">
@@ -90,64 +75,31 @@ export default function TaskReview({
         )}
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Field label="Due">
           <input
             type="date"
             value={draft.due}
             onChange={(e) => onChange({ due: e.target.value })}
             style={{ colorScheme: "dark" }}
-            className="w-full rounded-[var(--radius-control)] border border-[#8e9ae0]/25 bg-white/[0.04] px-3 py-2 text-sm text-[#eef1f8] focus:border-[#8e9ae0]/60 focus:outline-none"
+            className={inputCls}
           />
         </Field>
         <Field label="Priority">
-          <Segmented
-            value={draft.priority}
-            options={PRIORITIES.map((p) => ({ value: p, label: cap(p) }))}
-            onChange={(v) => onChange({ priority: v as TaskPriority })}
-          />
+          <Segmented value={draft.priority} options={PRIORITIES.map((p) => ({ value: p, label: cap(p) }))} onChange={(v) => onChange({ priority: v as TaskPriority })} />
+        </Field>
+        <Field label="Visibility">
+          <Segmented value={draft.visibility} options={visibilities.map((v) => ({ value: v, label: cap(v) }))} onChange={(v) => onChange({ visibility: v as TaskVisibility })} />
         </Field>
       </div>
-
-      <Field label="Visibility">
-        <Segmented
-          value={draft.visibility}
-          options={visibilities.map((v) => ({ value: v, label: cap(v) }))}
-          onChange={(v) => onChange({ visibility: v as TaskVisibility })}
-        />
-      </Field>
-
-      <div className="mt-1 flex items-center justify-center gap-3">
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={busy || !draft.title.trim()}
-          className="rounded-full bg-[#cad1e8] px-5 py-2 text-sm font-medium text-[#06070f] transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          {busy ? "Creating…" : "Create"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="rounded-full border border-[#8e9ae0]/30 px-5 py-2 text-sm font-light text-[#cad1e8] transition-colors hover:bg-white/[0.05] disabled:opacity-40"
-        >
-          Cancel
-        </button>
-      </div>
-      <p className="text-center text-[11px] font-light tracking-wide text-[#8e9ae0]/60">
-        or say “yes” to create
-      </p>
-    </div>
+    </>
   );
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[#8e9ae0]/60">
-        {label}
-      </span>
+      <span className="text-[11px] font-medium uppercase tracking-wider text-[#8e9ae0]/60">{label}</span>
       {children}
     </label>
   );

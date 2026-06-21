@@ -8,15 +8,16 @@ import { createEmailDraft, createReplyDraft, sendEmail } from "@/lib/google/gmai
 import { createEvent, rescheduleEvent, cancelEvent } from "@/lib/google/calendar-actions";
 import { dateInputToIso } from "@/lib/tasks/format";
 import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
+import ActionPanel, { type PanelOption } from "@/components/bridge/ActionPanel";
 import TaskReview, { type TaskDraft } from "@/components/bridge/TaskReview";
 import EmailReview, { type EmailDraftState } from "@/components/bridge/EmailReview";
 import EventReview, { type EventDraftState } from "@/components/bridge/EventReview";
 
-/* Push-to-talk conversation with Alfred — VOICE ONLY. The star is the only
-   ambient feedback. Alfred acts via a whitelist; everything except navigate is a
-   PROPOSAL the user reviews/edits and confirms (button or voice "yes") before
-   anything happens. Emails are drafts by default; sending is a separate explicit
-   confirm. */
+/* Push-to-talk conversation with Alfred — VOICE ONLY. Every proposal opens ONE
+   consistent review panel (wide card + on-screen options + spoken choices).
+   Options are available as buttons AND voice; a "Revise" intent on any panel
+   re-opens the conversation so Alfred adjusts the proposal in place. Nothing
+   changes data without an explicit confirmation. */
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ActionCall = { id: string; name: string; input: Record<string, unknown> };
@@ -31,7 +32,7 @@ type Directory = {
   userEmail?: string;
   userRole?: "member" | "founder";
 };
-type Confirm = { description: string; run: () => Promise<string> };
+type Confirm = { description: string; danger?: boolean; run: () => Promise<string> };
 
 const NAV: Record<string, string> = {
   overview: "/dashboard/overview",
@@ -42,8 +43,11 @@ const NAV: Record<string, string> = {
   bridge: "/bridge",
 };
 
-const YES = /\b(yes|yeah|yep|yup|confirm|create it|send it|do it|go ahead|please|sure|affirmative|correct|aye)\b/;
-const NO = /\b(no|nope|nah|cancel|don'?t|stop|never\s?mind|negative|leave it)\b/;
+const YES = /\b(yes|yeah|yep|yup|confirm|create|create it|go ahead|please|sure|affirmative|correct|aye|ok|okay)\b/;
+const NO = /\b(no|nope|nah|cancel|don'?t|stop|never\s?mind|negative|leave it|discard)\b/;
+const SEND = /\b(send it|send now|send|fire it off)\b/;
+const SAVE = /\b(save (draft|it|as draft)?|draft it|just draft|keep it as a draft)\b/;
+const REVISE = /\b(revise|redraft|re-?draft|rewrite|re-?write|redo|re-?do|not quite|amend|adjust|tweak|change (it|that|this)|edit it|make changes?)\b/;
 const DISMISS =
   /\b(that'?s all|that'?ll be all|that is all|dismiss|go away|goodbye|good bye|thank you alfred|thanks alfred|nothing else|that'?s it)\b/;
 
@@ -66,12 +70,16 @@ type Recognition = {
 export default function AlfredChat({
   onSpeakingChange,
   onListeningChange,
+  onPanelOpenChange,
   active = true,
   onDismiss,
   autoListenKey = 0,
 }: {
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
+  /** Fires whenever a review/confirm panel opens or closes (parent hides the
+   *  greeting/briefing while one is open). */
+  onPanelOpenChange?: (open: boolean) => void;
   active?: boolean;
   onDismiss?: () => void;
   autoListenKey?: number;
@@ -96,12 +104,16 @@ export default function AlfredChat({
   const finalRef = useRef("");
   const confirmRef = useRef<Confirm | null>(null);
   const taskRef = useRef<TaskDraft | null>(null);
-  const emailRef = useRef<EmailDraftState | null>(null);
-  const eventRef = useRef<EventDraftState | null>(null);
+  const emailRefState = useRef<EmailDraftState | null>(null);
+  const eventRefState = useRef<EventDraftState | null>(null);
+  const rosterRef = useRef<Person[]>([]);
+  const revisingRef = useRef(false);
   const timeZone = useRef("UTC");
 
+  const panelOpen = !!(taskDraft || emailDraft || eventDraft || confirm);
+
   const hasPending = useCallback(
-    () => !!(taskRef.current || emailRef.current || eventRef.current || confirmRef.current),
+    () => !!(taskRef.current || emailRefState.current || eventRefState.current || confirmRef.current),
     [],
   );
 
@@ -118,9 +130,8 @@ export default function AlfredChat({
     if (!w.SpeechRecognition && !w.webkitSpeechRecognition) setSupported(false);
   }, []);
 
-  useEffect(() => {
-    onListeningChange(listening);
-  }, [listening, onListeningChange]);
+  useEffect(() => onListeningChange(listening), [listening, onListeningChange]);
+  useEffect(() => onPanelOpenChange?.(panelOpen), [panelOpen, onPanelOpenChange]);
 
   const addAssistant = useCallback((text: string) => {
     if (text) setMessages((m) => [...m, { role: "assistant", content: text }]);
@@ -145,8 +156,8 @@ export default function AlfredChat({
 
   const clearPendings = useCallback(() => {
     taskRef.current = null;
-    emailRef.current = null;
-    eventRef.current = null;
+    emailRefState.current = null;
+    eventRefState.current = null;
     confirmRef.current = null;
     setTaskDraft(null);
     setEmailDraft(null);
@@ -183,23 +194,28 @@ export default function AlfredChat({
           if (path) router.push(path);
         }
 
-        clearPendings();
         let spoken = (data.reply ?? "").trim();
         const act = actions.find((a) => a.name !== "navigate");
+
+        // Apply atomically: clear the old panel and set the new one in one tick
+        // (no greeting flash when revising in place).
+        clearPendings();
         if (act) {
           const built = interpret(act, dir, timeZone.current);
-          if (built.error) spoken = built.error;
-          else {
+          if (built.error) {
+            spoken = built.error;
+          } else {
             if (built.task) {
               taskRef.current = built.task;
               setTaskDraft(built.task);
               setRoster(dir.profiles);
+              rosterRef.current = dir.profiles;
               setCanFounders(dir.userRole === "founder");
             } else if (built.email) {
-              emailRef.current = built.email;
+              emailRefState.current = built.email;
               setEmailDraft(built.email);
             } else if (built.event) {
-              eventRef.current = built.event;
+              eventRefState.current = built.event;
               setEventDraft(built.event);
             } else if (built.confirm) {
               confirmRef.current = built.confirm;
@@ -225,7 +241,7 @@ export default function AlfredChat({
     [messages, router, addAssistant, speakLine, clearPendings, hasPending],
   );
 
-  /* ── Submit handlers ──────────────────────────────────────────────────── */
+  /* ── Result + offer ───────────────────────────────────────────────────── */
 
   const finishWithResult = useCallback(
     (line: string, offer?: Confirm) => {
@@ -246,13 +262,12 @@ export default function AlfredChat({
     [addAssistant, speakLine],
   );
 
+  /* ── Submit handlers ──────────────────────────────────────────────────── */
+
   const submitTask = useCallback(async () => {
     const d = taskRef.current;
     if (!d) return;
-    if (!d.title.trim()) {
-      speakLine("It will need a title first.");
-      return;
-    }
+    if (!d.title.trim()) return speakLine("It will need a title first.");
     recRef.current?.abort();
     taskRef.current = null;
     setTaskDraft(null);
@@ -283,48 +298,50 @@ export default function AlfredChat({
     }
   }, [speakLine, finishWithResult, router, onDismiss]);
 
-  const submitEmail = useCallback(async () => {
-    const d = emailRef.current;
+  const submitEmailDraft = useCallback(async () => {
+    const d = emailRefState.current;
     if (!d) return;
-    if (!d.to.trim()) {
-      speakLine("It needs a recipient first.");
-      return;
-    }
+    if (!d.to.trim()) return speakLine("It needs a recipient first.");
     recRef.current?.abort();
-    emailRef.current = null;
+    emailRefState.current = null;
     setEmailDraft(null);
     setBusy(true);
     try {
-      if (d.mode === "send") {
-        const r = await sendEmail({ to: d.to, subject: d.subject, body: d.body, messageId: d.messageId });
-        finishWithResult(r.ok ? "Sent." : `I couldn't send it: ${r.error}`);
-      } else if (d.messageId) {
-        const r = await createReplyDraft({ messageId: d.messageId, to: d.to, subject: d.subject, body: d.body });
-        finishWithResult(r.ok ? "I've drafted the reply in your Gmail." : `I couldn't draft it: ${r.error}`);
-      } else {
-        const r = await createEmailDraft({ to: d.to, subject: d.subject, body: d.body });
-        finishWithResult(r.ok ? "I've drafted it in your Gmail." : `I couldn't draft it: ${r.error}`);
-      }
+      const r = d.messageId
+        ? await createReplyDraft({ messageId: d.messageId, to: d.to, subject: d.subject, body: d.body })
+        : await createEmailDraft({ to: d.to, subject: d.subject, body: d.body });
+      finishWithResult(r.ok ? "I've drafted it in your Gmail." : `I couldn't draft it: ${r.error}`);
     } catch {
       finishWithResult("I couldn't do that with your email, I'm afraid.");
     }
   }, [speakLine, finishWithResult]);
 
+  const submitEmailSend = useCallback(async () => {
+    const d = emailRefState.current;
+    if (!d) return;
+    if (!d.to.trim()) return speakLine("It needs a recipient first.");
+    recRef.current?.abort();
+    emailRefState.current = null;
+    setEmailDraft(null);
+    setBusy(true);
+    try {
+      const r = await sendEmail({ to: d.to, subject: d.subject, body: d.body, messageId: d.messageId });
+      finishWithResult(r.ok ? "Sent." : `I couldn't send it: ${r.error}`);
+    } catch {
+      finishWithResult("I couldn't send that, I'm afraid.");
+    }
+  }, [speakLine, finishWithResult]);
+
   const submitEvent = useCallback(async () => {
-    const d = eventRef.current;
+    const d = eventRefState.current;
     if (!d) return;
     recRef.current?.abort();
-    eventRef.current = null;
+    eventRefState.current = null;
     setEventDraft(null);
     setBusy(true);
     try {
       if (d.mode === "reschedule" && d.eventId) {
-        const r = await rescheduleEvent({
-          eventId: d.eventId,
-          start: d.start,
-          end: d.end,
-          timeZone: timeZone.current,
-        });
+        const r = await rescheduleEvent({ eventId: d.eventId, start: d.start, end: d.end, timeZone: timeZone.current });
         finishWithResult(r.ok ? `Done — I've moved “${d.title}”.` : `I couldn't move it: ${r.error}`);
       } else {
         const r = await createEvent({
@@ -357,11 +374,35 @@ export default function AlfredChat({
 
   const cancelPending = useCallback(() => {
     recRef.current?.abort();
+    revisingRef.current = false;
     clearPendings();
     const line = "Very good — I'll leave it.";
     addAssistant(line);
     speakLine(line);
   }, [clearPendings, addAssistant, speakLine]);
+
+  /* ── Revise: keep the panel, ask what to change, re-propose in place ────── */
+
+  const triggerRevise = useCallback(() => {
+    if (!(taskRef.current || emailRefState.current || eventRefState.current)) return;
+    revisingRef.current = true;
+    speakLine("Of course — what would you like to change?", () => startListening());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speakLine]);
+
+  const reviseSend = useCallback(
+    (instruction: string) => {
+      const msg = buildReviseMessage(instruction, rosterRef.current, {
+        task: taskRef.current,
+        email: emailRefState.current,
+        event: eventRefState.current,
+      });
+      if (msg) void send(msg);
+    },
+    [send],
+  );
+
+  /* ── Voice routing ────────────────────────────────────────────────────── */
 
   const resolveByVoice = useCallback(
     (text: string) => {
@@ -369,29 +410,32 @@ export default function AlfredChat({
       const relisten = () => {
         if (hasPending()) startListening();
       };
-      const yes = YES.test(t);
-      const no = NO.test(t);
-      if (taskRef.current) {
-        if (yes) void submitTask();
-        else if (no) cancelPending();
-        else speakLine("Sorry — shall I create it? Yes or no.", relisten);
-      } else if (emailRef.current) {
-        if (yes) void submitEmail();
-        else if (no) cancelPending();
-        else speakLine("Sorry — yes or no?", relisten);
-      } else if (eventRef.current) {
-        if (yes) void submitEvent();
-        else if (no) cancelPending();
-        else speakLine("Sorry — yes or no?", relisten);
+      if (REVISE.test(t) && (taskRef.current || emailRefState.current || eventRefState.current)) {
+        triggerRevise();
+        return;
+      }
+      if (emailRefState.current) {
+        if (SEND.test(t)) void submitEmailSend();
+        else if (SAVE.test(t) || YES.test(t)) void submitEmailDraft();
+        else if (NO.test(t)) cancelPending();
+        else speakLine("Send, save draft, redraft, or cancel?", relisten);
+      } else if (taskRef.current) {
+        if (YES.test(t)) void submitTask();
+        else if (NO.test(t)) cancelPending();
+        else speakLine("Create, revise, or cancel?", relisten);
+      } else if (eventRefState.current) {
+        if (YES.test(t)) void submitEvent();
+        else if (NO.test(t)) cancelPending();
+        else speakLine("Confirm, revise, or cancel?", relisten);
       } else if (confirmRef.current) {
-        if (yes) void doConfirm();
-        else if (no) cancelPending();
-        else speakLine("Sorry — was that a yes or a no?", relisten);
+        if (YES.test(t)) void doConfirm();
+        else if (NO.test(t)) cancelPending();
+        else speakLine("Confirm or cancel?", relisten);
       }
     },
     // startListening defined below
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [submitTask, submitEmail, submitEvent, doConfirm, cancelPending, speakLine, hasPending],
+    [submitTask, submitEmailDraft, submitEmailSend, submitEvent, doConfirm, cancelPending, triggerRevise, speakLine, hasPending],
   );
 
   const startListening = useCallback(() => {
@@ -436,6 +480,11 @@ export default function AlfredChat({
       recRef.current = null;
       const text = finalRef.current.trim();
       if (!text) return;
+      if (revisingRef.current) {
+        revisingRef.current = false;
+        reviseSend(text);
+        return;
+      }
       if (hasPending()) resolveByVoice(text);
       else if (onDismiss && DISMISS.test(text.toLowerCase())) onDismiss();
       else void send(text);
@@ -449,7 +498,7 @@ export default function AlfredChat({
       setListening(false);
       setError("I couldn't start listening. Do try again.");
     }
-  }, [onSpeakingChange, send, resolveByVoice, onDismiss, hasPending]);
+  }, [onSpeakingChange, send, resolveByVoice, reviseSend, onDismiss, hasPending]);
 
   useEffect(() => {
     if (active) return;
@@ -473,96 +522,111 @@ export default function AlfredChat({
     startListening();
   }
 
+  /* ── Panel options ────────────────────────────────────────────────────── */
+
+  const taskOptions: PanelOption[] = [
+    { label: "Create", kind: "primary", onClick: () => void submitTask() },
+    { label: "Revise", kind: "ghost", onClick: triggerRevise },
+    { label: "Cancel", kind: "ghost", onClick: cancelPending },
+  ];
+  const emailOptions: PanelOption[] = [
+    { label: "Send", kind: "send", onClick: () => void submitEmailSend() },
+    { label: "Redraft", kind: "ghost", onClick: triggerRevise },
+    { label: "Save draft", kind: "primary", onClick: () => void submitEmailDraft() },
+    { label: "Cancel", kind: "ghost", onClick: cancelPending },
+  ];
+  const eventOptions: PanelOption[] = [
+    {
+      label: eventDraft?.mode === "reschedule" ? "Reschedule" : "Create",
+      kind: "primary",
+      onClick: () => void submitEvent(),
+    },
+    { label: "Revise", kind: "ghost", onClick: triggerRevise },
+    { label: "Cancel", kind: "ghost", onClick: cancelPending },
+  ];
+  const confirmOptions: PanelOption[] = [
+    { label: "Confirm", kind: confirm?.danger ? "danger" : "primary", onClick: () => void doConfirm() },
+    { label: "Cancel", kind: "ghost", onClick: cancelPending },
+  ];
+
   const hint = !supported
     ? "Voice input isn't supported in this browser."
     : error
       ? ""
-      : taskDraft || emailDraft || eventDraft
-        ? "Review and edit, then confirm — or say yes"
-        : confirm
-          ? "Tap Confirm, or say yes / no"
-          : listening
-            ? "Listening… tap to stop"
-            : busy
-              ? "One moment…"
-              : "Tap to talk to Alfred";
+      : panelOpen
+        ? "Tap a choice, or just say it"
+        : listening
+          ? "Listening… tap to stop"
+          : busy
+            ? "One moment…"
+            : "Tap to talk to Alfred";
 
   return (
     <div className="mt-8 flex w-full flex-col items-center">
       {taskDraft && (
-        <TaskReview
-          draft={taskDraft}
-          profiles={roster}
-          canFounders={canFounders}
-          busy={busy}
-          onChange={(patch) =>
-            setTaskDraft((d) => {
-              if (!d) return d;
-              const nd = { ...d, ...patch };
-              taskRef.current = nd;
-              return nd;
-            })
-          }
-          onConfirm={() => void submitTask()}
-          onCancel={cancelPending}
-        />
+        <ActionPanel title="New task — review" say="Create · Revise · Cancel" options={taskOptions} busy={busy}>
+          <TaskReview
+            draft={taskDraft}
+            profiles={roster}
+            canFounders={canFounders}
+            onChange={(patch) =>
+              setTaskDraft((d) => {
+                if (!d) return d;
+                const nd = { ...d, ...patch };
+                taskRef.current = nd;
+                return nd;
+              })
+            }
+          />
+        </ActionPanel>
       )}
 
       {emailDraft && (
-        <EmailReview
-          draft={emailDraft}
+        <ActionPanel
+          title={emailDraft.messageId ? "Reply draft — review" : "Email draft — review"}
+          say="Send · Redraft · Save draft · Cancel"
+          options={emailOptions}
           busy={busy}
-          onChange={(patch) =>
-            setEmailDraft((d) => {
-              if (!d) return d;
-              const nd = { ...d, ...patch };
-              emailRef.current = nd;
-              return nd;
-            })
-          }
-          onConfirm={() => void submitEmail()}
-          onCancel={cancelPending}
-        />
+        >
+          <EmailReview
+            draft={emailDraft}
+            onChange={(patch) =>
+              setEmailDraft((d) => {
+                if (!d) return d;
+                const nd = { ...d, ...patch };
+                emailRefState.current = nd;
+                return nd;
+              })
+            }
+          />
+        </ActionPanel>
       )}
 
       {eventDraft && (
-        <EventReview
-          draft={eventDraft}
+        <ActionPanel
+          title={eventDraft.mode === "reschedule" ? "Reschedule event — review" : "New event — review"}
+          say={`${eventDraft.mode === "reschedule" ? "Reschedule" : "Create"} · Revise · Cancel`}
+          options={eventOptions}
           busy={busy}
-          onChange={(patch) =>
-            setEventDraft((d) => {
-              if (!d) return d;
-              const nd = { ...d, ...patch };
-              eventRef.current = nd;
-              return nd;
-            })
-          }
-          onConfirm={() => void submitEvent()}
-          onCancel={cancelPending}
-        />
+        >
+          <EventReview
+            draft={eventDraft}
+            onChange={(patch) =>
+              setEventDraft((d) => {
+                if (!d) return d;
+                const nd = { ...d, ...patch };
+                eventRefState.current = nd;
+                return nd;
+              })
+            }
+          />
+        </ActionPanel>
       )}
 
       {confirm && (
-        <div className="mb-5 flex w-full max-w-md flex-col items-center gap-3 rounded-[var(--radius-card)] border border-[#8e9ae0]/25 bg-white/[0.04] px-5 py-4 text-center">
+        <ActionPanel title="Please confirm" say="Confirm · Cancel" options={confirmOptions} busy={busy}>
           <p className="text-sm font-light leading-relaxed text-[#eef1f8]">{confirm.description}</p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void doConfirm()}
-              className="rounded-full bg-[#cad1e8] px-5 py-2 text-sm font-medium text-[#06070f] transition-opacity hover:opacity-90"
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              onClick={cancelPending}
-              className="rounded-full border border-[#8e9ae0]/30 px-5 py-2 text-sm font-light text-[#cad1e8] transition-colors hover:bg-white/[0.05]"
-            >
-              Cancel
-            </button>
-          </div>
-          <p className="text-[11px] font-light tracking-wide text-[#8e9ae0]/60">or say “yes” or “no”</p>
-        </div>
+        </ActionPanel>
       )}
 
       <button
@@ -602,7 +666,7 @@ type Interpretation = {
   error?: string;
 };
 
-function interpret(act: ActionCall, dir: Directory, tz: string): Interpretation {
+function interpret(act: ActionCall, dir: Directory, _tz: string): Interpretation {
   const input = act.input;
   switch (act.name) {
     case "create_task":
@@ -652,9 +716,10 @@ function interpretTask(input: Record<string, unknown>, dir: Directory): Interpre
   const dueLabel = due ? prettyDate(dateInputToIso(due) ?? "") : "";
   const priority = oneOf(input.priority, ["low", "normal", "high"], "normal") as TaskPriority;
   const visibility = oneOf(input.visibility, ["team", "personal", "founders"], "team") as TaskVisibility;
-  const who = resolvedFirst.length ? `assigned to ${joinNames(resolvedFirst)}` : "unassigned for now";
-  let spoken = `I've drafted a task: ${title}, ${who}${dueLabel ? `, due ${dueLabel}` : ""} — shall I create it?`;
-  if (unresolved.length) spoken += ` I couldn't place ${joinNames(unresolved)}; do add them yourself if you like.`;
+  const who = resolvedFirst.length ? `assigned to ${joinNames(resolvedFirst)}` : "unassigned";
+  let spoken = `I've drafted a task: ${title}, ${who}${dueLabel ? `, due ${dueLabel}` : ""}.`;
+  if (unresolved.length) spoken += ` I couldn't place ${joinNames(unresolved)}.`;
+  spoken += " Say create, revise, or cancel.";
   return { task: { title, assigneeIds, due, priority, visibility }, spoken };
 }
 
@@ -666,7 +731,7 @@ function interpretStatus(input: Record<string, unknown>, dir: Directory): Interp
   const label = status === "done" ? "done" : status === "in_progress" ? "in progress" : "to do";
   return {
     confirm: {
-      description: `Mark “${task.title}” as ${label}`,
+      description: `Mark “${task.title}” as ${label}.`,
       run: async () => {
         try {
           const r = await setStatus(task.id, status);
@@ -676,24 +741,17 @@ function interpretStatus(input: Record<string, unknown>, dir: Directory): Interp
         }
       },
     },
-    spoken: `Shall I mark ${task.title} as ${label}?`,
+    spoken: `Shall I mark ${task.title} as ${label}? Say confirm or cancel.`,
   };
 }
 
 function interpretDraftReply(input: Record<string, unknown>, dir: Directory): Interpretation {
-  const ref = String(input.emailRef ?? "").trim();
-  const email = resolveEmail(ref, dir.emails);
-  if (!email) return { error: `I couldn't find which email to reply to. Which one did you mean?` };
+  const email = resolveEmail(String(input.emailRef ?? "").trim(), dir.emails);
+  if (!email) return { error: "I couldn't find which email to reply to. Which one did you mean?" };
   const subject = /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`;
   return {
-    email: {
-      mode: "draft",
-      to: email.fromEmail || email.from,
-      subject,
-      body: String(input.body ?? ""),
-      messageId: email.messageId,
-    },
-    spoken: `I've drafted a reply to ${email.from} — review and confirm, and I'll save it to your Gmail.`,
+    email: { to: email.fromEmail || email.from, subject, body: String(input.body ?? ""), messageId: email.messageId, fromName: email.from },
+    spoken: `I've drafted a reply to ${email.from}. Say send, save draft, redraft, or cancel.`,
   };
 }
 
@@ -701,33 +759,28 @@ function interpretDraftEmail(input: Record<string, unknown>, dir: Directory): In
   const rawTo = String(input.to ?? "").trim();
   const to = rawTo.includes("@") ? rawTo : resolveProfileEmail(rawTo, dir.profiles) || rawTo;
   return {
-    email: {
-      mode: "draft",
-      to,
-      subject: String(input.subject ?? ""),
-      body: String(input.body ?? ""),
-    },
-    spoken: `I've drafted an email${to ? ` to ${shortRecipient(to)}` : ""} — review and confirm, and I'll save it to your Gmail.`,
+    email: { to, subject: String(input.subject ?? ""), body: String(input.body ?? "") },
+    spoken: `I've drafted an email${to ? ` to ${shortRecipient(to)}` : ""}. Say send, save draft, redraft, or cancel.`,
   };
 }
 
 function interpretSendEmail(input: Record<string, unknown>, dir: Directory): Interpretation {
-  const ref = input.emailRef ? String(input.emailRef).trim() : "";
+  const refStr = input.emailRef ? String(input.emailRef).trim() : "";
   const body = String(input.body ?? "");
-  if (ref) {
-    const email = resolveEmail(ref, dir.emails);
+  if (refStr) {
+    const email = resolveEmail(refStr, dir.emails);
     if (!email) return { error: "I couldn't find which email to send a reply to. Which one?" };
     const subject = /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`;
     return {
-      email: { mode: "send", to: email.fromEmail || email.from, subject, body, messageId: email.messageId },
-      spoken: `Shall I send this reply to ${email.from}? It will go out straight away.`,
+      email: { to: email.fromEmail || email.from, subject, body, messageId: email.messageId, fromName: email.from },
+      spoken: `Ready to reply to ${email.from}. Say send to send now, save draft, redraft, or cancel.`,
     };
   }
   const rawTo = String(input.to ?? "").trim();
   const to = rawTo.includes("@") ? rawTo : resolveProfileEmail(rawTo, dir.profiles) || rawTo;
   return {
-    email: { mode: "send", to, subject: String(input.subject ?? ""), body },
-    spoken: `Shall I send this${to ? ` to ${shortRecipient(to)}` : ""}? It will go out straight away.`,
+    email: { to, subject: String(input.subject ?? ""), body },
+    spoken: `Ready to email${to ? ` ${shortRecipient(to)}` : ""}. Say send to send now, save draft, redraft, or cancel.`,
   };
 }
 
@@ -740,46 +793,35 @@ function interpretCreateEvent(input: Record<string, unknown>): Interpretation {
   const attendees = Array.isArray(input.attendees)
     ? (input.attendees as unknown[]).map((a) => String(a ?? "").trim()).filter(Boolean)
     : [];
-  // (attendee names are passed straight through to the editable field; emails
-  // are kept as-is — the user can adjust before confirming.)
   return {
-    event: {
-      mode: "create",
-      title,
-      start,
-      end,
-      attendees: attendees.join(", "),
-      description: String(input.description ?? ""),
-    },
-    spoken: `I've drafted an event: ${title}, ${whenLabel(start)} — shall I add it?`,
+    event: { mode: "create", title, start, end, attendees: attendees.join(", "), description: String(input.description ?? "") },
+    spoken: `I've drafted an event: ${title}, ${whenLabel(start)}. Say create, revise, or cancel.`,
   };
 }
 
 function interpretReschedule(input: Record<string, unknown>, dir: Directory): Interpretation {
-  const ref = String(input.eventRef ?? "").trim();
-  const ev = resolveEvent(ref, dir.events);
+  const ev = resolveEvent(String(input.eventRef ?? "").trim(), dir.events);
   if (!ev) return { error: "I couldn't find which event to move. Which one did you mean?" };
   const start = toLocalInput(String(input.newStart ?? ""));
   if (!start) return { error: "I didn't catch a valid new time." };
   let end: string;
-  if (input.newEnd) {
-    end = toLocalInput(String(input.newEnd));
-  } else {
+  if (input.newEnd) end = toLocalInput(String(input.newEnd));
+  else {
     const durMs = Date.parse(ev.end) - Date.parse(ev.start);
     end = addMinutesLocal(start, Number.isFinite(durMs) && durMs > 0 ? durMs / 60000 : 60);
   }
   return {
     event: { mode: "reschedule", title: ev.title, start, end, attendees: "", description: "", eventId: ev.id },
-    spoken: `Shall I move ${ev.title} to ${whenLabel(start)}?`,
+    spoken: `Move ${ev.title} to ${whenLabel(start)}? Say reschedule, revise, or cancel.`,
   };
 }
 
 function interpretCancel(input: Record<string, unknown>, dir: Directory): Interpretation {
-  const ref = String(input.eventRef ?? "").trim();
-  const ev = resolveEvent(ref, dir.events);
+  const ev = resolveEvent(String(input.eventRef ?? "").trim(), dir.events);
   if (!ev) return { error: "I couldn't find which event to cancel. Which one did you mean?" };
   return {
     confirm: {
+      danger: true,
       description: `Cancel “${ev.title}” (${ev.when})? It will be removed from your calendar.`,
       run: async () => {
         try {
@@ -790,8 +832,41 @@ function interpretCancel(input: Record<string, unknown>, dir: Directory): Interp
         }
       },
     },
-    spoken: `Shall I cancel ${ev.title} on ${ev.when}?`,
+    spoken: `Shall I cancel ${ev.title} on ${ev.when}? Say confirm or cancel.`,
   };
+}
+
+/* ── Revise message — current proposal + the requested change ───────────── */
+
+function buildReviseMessage(
+  instruction: string,
+  roster: Person[],
+  pend: { task: TaskDraft | null; email: EmailDraftState | null; event: EventDraftState | null },
+): string | null {
+  const change = instruction.trim();
+  if (!change) return null;
+  if (pend.task) {
+    const t = pend.task;
+    const names = t.assigneeIds
+      .map((id) => roster.find((p) => p.id === id)?.first)
+      .filter(Boolean)
+      .join(", ");
+    return `Please revise the task we're about to create. Current — title: "${t.title}"; assignees: ${
+      names || "none"
+    }; due: ${t.due || "none"}; priority: ${t.priority}; visibility: ${t.visibility}. The change: ${change}. Re-propose it with create_task.`;
+  }
+  if (pend.email) {
+    const e = pend.email;
+    const kind = e.messageId ? `reply to ${e.fromName || e.to}` : `email to ${e.to}`;
+    return `Please revise the ${kind} we're drafting (subject "${e.subject}"). Current body: "${e.body}". The change: ${change}. Re-propose the same email as a draft.`;
+  }
+  if (pend.event) {
+    const v = pend.event;
+    return `Please revise the event we're proposing. Current — title: "${v.title}"; start: ${v.start}; end: ${v.end}; attendees: ${
+      v.attendees || "none"
+    }. The change: ${change}. Re-propose it.`;
+  }
+  return null;
 }
 
 /* ── Resolution + formatting helpers ───────────────────────────────────── */
@@ -819,20 +894,17 @@ function resolveTask(ref: string, openTasks: { id: string; title: string }[]): {
 }
 
 function resolveEmail(ref: string, emails: EmailRef[]): EmailRef | null {
-  if (!ref) return emails[0] ?? null; // "reply to that email" → the latest
+  if (!ref) return emails[0] ?? null;
   const want = ref.trim().toLowerCase();
   const byId = emails.find((e) => e.messageId === ref);
   if (byId) return byId;
-  const scored = emails
-    .map((e) => ({
-      e,
-      hit:
-        e.from.toLowerCase().includes(want) ||
-        e.subject.toLowerCase().includes(want) ||
-        want.includes(e.from.toLowerCase()),
-    }))
-    .filter((s) => s.hit);
-  return scored.length ? scored[0].e : null;
+  const hit = emails.find(
+    (e) =>
+      e.from.toLowerCase().includes(want) ||
+      e.subject.toLowerCase().includes(want) ||
+      want.includes(e.from.toLowerCase()),
+  );
+  return hit ?? null;
 }
 
 function resolveEvent(ref: string, events: EventRef[]): EventRef | null {
@@ -840,10 +912,8 @@ function resolveEvent(ref: string, events: EventRef[]): EventRef | null {
   const want = ref.trim().toLowerCase();
   const byId = events.find((e) => e.id === ref);
   if (byId) return byId;
-  const subs = events.filter(
-    (e) => e.title.toLowerCase().includes(want) || e.when.toLowerCase().includes(want),
-  );
-  return subs.length ? subs[0] : null;
+  const hit = events.find((e) => e.title.toLowerCase().includes(want) || e.when.toLowerCase().includes(want));
+  return hit ?? null;
 }
 
 function oneOf(value: unknown, allowed: string[], fallback: string): string {
@@ -858,7 +928,6 @@ function toDateInput(d: string): string {
   return formatLocalDate(new Date(t));
 }
 
-/* datetime-local "YYYY-MM-DDTHH:mm" from an ISO/local string. */
 function toLocalInput(s: string): string {
   const t = s.trim();
   const m = t.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
@@ -893,13 +962,7 @@ function prettyDate(iso: string): string {
 function whenLabel(local: string): string {
   const d = new Date(local);
   if (Number.isNaN(d.getTime())) return local;
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function shortRecipient(to: string): string {

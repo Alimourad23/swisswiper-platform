@@ -24,6 +24,7 @@ export default function AlfredOverlay({
 }) {
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -46,17 +47,23 @@ export default function AlfredOverlay({
       {open && <StarfieldCanvas />}
 
       <div className="pointer-events-none relative z-10 flex h-full flex-col items-center justify-center px-6 text-center">
-        <div className="pointer-events-auto flex flex-col items-center">
+        <div className="pointer-events-auto flex w-full flex-col items-center">
           {open && (
             <AlfredStar
               speaking={speaking}
               listening={listening}
-              className="aspect-square h-[clamp(150px,28vh,280px)] w-auto"
+              className={
+                panelOpen
+                  ? "aspect-square h-[clamp(96px,16vh,170px)] w-auto"
+                  : "aspect-square h-[clamp(150px,28vh,280px)] w-auto"
+              }
             />
           )}
-          <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/70">
-            Alfred
-          </p>
+          {!panelOpen && (
+            <p className="mt-3 text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/70">
+              Alfred
+            </p>
+          )}
 
           <AlfredChat
             active={open}
@@ -64,15 +71,18 @@ export default function AlfredOverlay({
             onDismiss={onClose}
             onSpeakingChange={setSpeaking}
             onListeningChange={setListening}
+            onPanelOpenChange={setPanelOpen}
           />
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-6 text-xs font-light tracking-wide text-[#8e9ae0]/60 transition-colors hover:text-[#cad1e8]"
-          >
-            Dismiss · Esc · “that&rsquo;s all”
-          </button>
+          {!panelOpen && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-6 text-xs font-light tracking-wide text-[#8e9ae0]/60 transition-colors hover:text-[#cad1e8]"
+            >
+              Dismiss · Esc · “that&rsquo;s all”
+            </button>
+          )}
         </div>
       </div>
     </div>
