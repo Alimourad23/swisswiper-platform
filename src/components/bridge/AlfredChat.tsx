@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { speak, stopSpeaking, unlockAudio } from "@/lib/bridge/voice";
 import { createTask, setStatus } from "@/lib/tasks/actions";
+import { planToday } from "@/lib/tasks/today";
+import DayPlanReview, { type DayPlanDraft, type DayPlanItem } from "@/components/bridge/DayPlanReview";
 import { createEmailDraft, createReplyDraft, deleteDraft, sendEmail } from "@/lib/google/gmail-actions";
 import { createEvent, rescheduleEvent, cancelEvent, addAttendees } from "@/lib/google/calendar-actions";
 import { dateInputToIso } from "@/lib/tasks/format";
@@ -132,6 +134,7 @@ export default function AlfredChat({
   const [taskDraft, setTaskDraft] = useState<TaskDraft | null>(null);
   const [emailDraft, setEmailDraft] = useState<EmailDraftState | null>(null);
   const [eventDraft, setEventDraft] = useState<EventDraftState | null>(null);
+  const [dayPlan, setDayPlan] = useState<DayPlanDraft | null>(null);
   const [roster, setRoster] = useState<Person[]>([]);
   const [canFounders, setCanFounders] = useState(false);
 
@@ -143,6 +146,7 @@ export default function AlfredChat({
   const taskRef = useRef<TaskDraft | null>(null);
   const emailRefState = useRef<EmailDraftState | null>(null);
   const eventRefState = useRef<EventDraftState | null>(null);
+  const dayPlanRef = useRef<DayPlanDraft | null>(null);
   const rosterRef = useRef<Person[]>([]);
   const timeZone = useRef("UTC");
   const activeRef = useRef(active);
@@ -157,10 +161,17 @@ export default function AlfredChat({
   const endConversationRef = useRef<(() => void) | null>(null);
   const startListeningRef = useRef<(() => void) | null>(null);
 
-  const panelOpen = !!(taskDraft || emailDraft || eventDraft || confirm);
+  const panelOpen = !!(taskDraft || emailDraft || eventDraft || dayPlan || confirm);
 
   const hasPending = useCallback(
-    () => !!(taskRef.current || emailRefState.current || eventRefState.current || confirmRef.current),
+    () =>
+      !!(
+        taskRef.current ||
+        emailRefState.current ||
+        eventRefState.current ||
+        dayPlanRef.current ||
+        confirmRef.current
+      ),
     [],
   );
 
@@ -208,10 +219,12 @@ export default function AlfredChat({
     taskRef.current = null;
     emailRefState.current = null;
     eventRefState.current = null;
+    dayPlanRef.current = null;
     confirmRef.current = null;
     setTaskDraft(null);
     setEmailDraft(null);
     setEventDraft(null);
+    setDayPlan(null);
     setConfirm(null);
   }, []);
 
@@ -293,6 +306,9 @@ export default function AlfredChat({
             } else if (built.event) {
               eventRefState.current = built.event;
               setEventDraft(built.event);
+            } else if (built.dayPlan) {
+              dayPlanRef.current = built.dayPlan;
+              setDayPlan(built.dayPlan);
             } else if (built.confirm) {
               confirmRef.current = built.confirm;
               setConfirm(built.confirm);
@@ -495,6 +511,30 @@ export default function AlfredChat({
     finishWithResult(result);
   }, [stopRecForAction, finishWithResult]);
 
+  const submitDayPlan = useCallback(async () => {
+    const d = dayPlanRef.current;
+    if (!d) return;
+    stopRecForAction();
+    dayPlanRef.current = null;
+    setDayPlan(null);
+    setBusy(true);
+    try {
+      await Promise.all(d.items.map((it) => planToday(it.taskId, d.date, it.estimateMin)));
+      window.dispatchEvent(new Event("sw-today-planned")); // refresh Today surfaces
+      const total = d.items.reduce((n, i) => n + i.estimateMin, 0);
+      const h = total / 60;
+      finishWithResult(
+        d.items.length
+          ? `Done — your day is set: ${d.items.length} task${d.items.length === 1 ? "" : "s"}, about ${
+              Number.isInteger(h) ? h : h.toFixed(1)
+            } hours.`
+          : "Nothing to plan, then.",
+      );
+    } catch {
+      finishWithResult("I couldn't set your day, I'm afraid.");
+    }
+  }, [stopRecForAction, finishWithResult]);
+
   const cancelPending = useCallback(() => {
     stopRecForAction();
     clearPendings();
@@ -524,7 +564,7 @@ export default function AlfredChat({
   }, [stopRecForAction, finishWithResult]);
 
   const triggerRevise = useCallback(() => {
-    if (!(taskRef.current || emailRefState.current || eventRefState.current)) return;
+    if (!(taskRef.current || emailRefState.current || eventRefState.current || dayPlanRef.current)) return;
     stopRecForAction();
     speakLine("Of course — what would you like to change?", resumeListening);
   }, [stopRecForAction, speakLine, resumeListening]);
@@ -569,12 +609,16 @@ export default function AlfredChat({
         if (shortCmd && AFFIRM.test(t)) return void submitEvent();
         return freeForm(text);
       }
+      if (dayPlanRef.current) {
+        if (shortCmd && (AFFIRM.test(t) || /\bset (the )?day\b|\bset it\b/.test(t))) return void submitDayPlan();
+        return freeForm(text);
+      }
       if (confirmRef.current) {
         if (shortCmd && AFFIRM.test(t)) return void doConfirm();
         return freeForm(text);
       }
     },
-    [triggerRevise, cancelPending, submitEmailSend, submitEmailDraft, submitTask, submitEvent, doConfirm, freeForm],
+    [triggerRevise, cancelPending, submitEmailSend, submitEmailDraft, submitTask, submitEvent, submitDayPlan, doConfirm, freeForm],
   );
 
   /* ── Listening loop ───────────────────────────────────────────────────── */
@@ -794,6 +838,11 @@ export default function AlfredChat({
     { label: "Confirm", kind: confirm?.danger ? "danger" : "primary", onClick: () => void doConfirm() },
     { label: "Cancel", kind: "ghost", onClick: cancelPending },
   ];
+  const dayPlanOptions: PanelOption[] = [
+    { label: "Set the day", kind: "primary", onClick: () => void submitDayPlan() },
+    { label: "Revise", kind: "ghost", onClick: triggerRevise },
+    { label: "Cancel", kind: "ghost", onClick: cancelPending },
+  ];
 
   const hint = !supported
     ? "Voice input isn't supported in this browser."
@@ -869,6 +918,22 @@ export default function AlfredChat({
         </ActionPanel>
       )}
 
+      {dayPlan && (
+        <ActionPanel title="Today's plan — review" say="Set the day · Revise · Cancel" options={dayPlanOptions} busy={busy}>
+          <DayPlanReview
+            draft={dayPlan}
+            onChange={(patch) =>
+              setDayPlan((d) => {
+                if (!d) return d;
+                const nd = { ...d, ...patch };
+                dayPlanRef.current = nd;
+                return nd;
+              })
+            }
+          />
+        </ActionPanel>
+      )}
+
       {confirm && (
         <ActionPanel title="Please confirm" say="Confirm · Cancel" options={confirmOptions} busy={busy}>
           <p className="text-sm font-light leading-relaxed text-[#eef1f8]">{confirm.description}</p>
@@ -907,6 +972,7 @@ type Interpretation = {
   task?: TaskDraft;
   email?: EmailDraftState;
   event?: EventDraftState;
+  dayPlan?: DayPlanDraft;
   confirm?: Confirm;
   spoken?: string;
   error?: string;
@@ -915,6 +981,8 @@ type Interpretation = {
 function interpret(act: ActionCall, dir: Directory): Interpretation {
   const input = act.input;
   switch (act.name) {
+    case "plan_day":
+      return interpretPlanDay(input, dir);
     case "create_task":
       return interpretTask(input, dir);
     case "set_task_status":
@@ -969,6 +1037,37 @@ function interpretTask(input: Record<string, unknown>, dir: Directory): Interpre
   if (unresolved.length) spoken += ` I couldn't place ${joinNames(unresolved)}.`;
   spoken += " Say create, revise, or cancel.";
   return { task: { title, assigneeIds, due, priority, visibility }, spoken };
+}
+
+function planDayDate(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function interpretPlanDay(input: Record<string, unknown>, dir: Directory): Interpretation {
+  const raw = Array.isArray(input.items) ? (input.items as Record<string, unknown>[]) : [];
+  const items: DayPlanItem[] = [];
+  for (const r of raw) {
+    const ref = String(r?.task ?? r?.taskTitleOrId ?? "").trim();
+    if (!ref) continue;
+    const t = resolveTask(ref, dir.openTasks);
+    if (!t || items.some((x) => x.taskId === t.id)) continue;
+    const mins = Number(r?.minutes ?? r?.estimateMin ?? 30);
+    const estimateMin = Number.isFinite(mins) && mins > 0 ? Math.max(5, Math.round(mins)) : 30;
+    items.push({ taskId: t.id, title: t.title, estimateMin });
+  }
+  if (!items.length) {
+    return { error: "I couldn't match those to your open tasks. What would you like on today?" };
+  }
+  const total = items.reduce((n, i) => n + i.estimateMin, 0);
+  const h = total / 60;
+  return {
+    dayPlan: { items, date: planDayDate() },
+    spoken: `Here's a plan for today — ${items.length} task${items.length === 1 ? "" : "s"}, about ${
+      Number.isInteger(h) ? h : h.toFixed(1)
+    } hours. Say "set the day", revise, or cancel.`,
+  };
 }
 
 function interpretStatus(input: Record<string, unknown>, dir: Directory): Interpretation {

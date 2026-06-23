@@ -34,7 +34,14 @@ export default function TodayPlan({ tasks, userId }: { tasks: Task[]; userId: st
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    getTodayRows(date).then(setRows);
+    let live = true;
+    const load = () => getTodayRows(date).then((r) => live && setRows(r));
+    load();
+    window.addEventListener("sw-today-planned", load); // Alfred set the day
+    return () => {
+      live = false;
+      window.removeEventListener("sw-today-planned", load);
+    };
   }, [date]);
 
   // Merge team tasks with to-dos written right here.

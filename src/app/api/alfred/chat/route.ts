@@ -177,6 +177,28 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["eventRef", "attendees"],
     },
   },
+  {
+    name: "plan_day",
+    description:
+      "Propose a realistic plan for TODAY: pick which of the user's OPEN tasks to focus on today and estimate minutes for each. Prioritise overdue, then due-today, then high priority. Keep the total realistic — around 6 hours, and less if the calendar is busy today. A proposal: the app shows an editable review and the user confirms. Match each item's `task` to an open task title from the briefing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              task: { type: "string", description: "The task title (must match one of the user's open tasks)." },
+              minutes: { type: "number", description: "Estimated minutes to spend on it today." },
+            },
+            required: ["task", "minutes"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
 ];
 
 export async function POST(req: Request) {
@@ -263,6 +285,7 @@ About SwissWiper (use this whenever you draft an email or answer about the compa
 You can take actions through tools. CRITICAL: to DO anything — create a task, draft or send an email, create/move/cancel a calendar event, mark a task done — you MUST call the matching tool. Acknowledging in words alone ("Very good, sir", "I'll draft that") does NOTHING — if you don't call the tool, nothing happens and the review panel never appears. So whenever ${firstName} clearly asks for one of these, CALL the tool in the same turn (you may also say a short proposal line). ALL tools except navigate are PROPOSALS: the app shows ${firstName} an editable review and he confirms (or says "yes") before anything happens — so phrase your spoken line as a proposal ("Shall I…?", "I've drafted…"), never as already done.
 - navigate(destination): immediate; give a brief spoken confirmation.
 - create_task / set_task_status: the team to-do. Real teammates only (roster below); absolute YYYY-MM-DD due dates (today is ${todayIso}).
+- plan_day: when ${firstName} asks you to plan today / set up his day / "what should I focus on", propose today's plan with plan_day — pick from his OPEN tasks (overdue and due-today first, then high priority), estimate minutes for each, and keep the total realistic (~6h, less if today's calendar is busy).
 - draft_reply / draft_email: compose email saved as a DRAFT in Gmail — you do NOT send. After confirming, say "I've drafted it in your Gmail." Match emailRef to a recent email below. When the user's message includes the original email text, your SPOKEN reply for the proposal should: (1) in one short sentence, say what their email is about; (2) read your drafted reply aloud; (3) offer "Shall I send it, save it as a draft, redraft, or cancel?". Keep it natural, not robotic. You can also be asked to add/remove/move recipients between To, Cc and Bcc — use the cc/bcc fields (names or emails) and keep the rest of the draft intact.
 - send_email: actually SENDS — use ONLY when ${firstName} clearly says to send it. Default to drafting; the app confirms sending separately.
 - create_event / reschedule_event / cancel_event / add_attendees: the primary calendar. Times are ISO 8601 local in ${firstName}'s timezone (e.g. 2026-06-22T15:00). Match eventRef to an upcoming event below. Cancelling needs a clear confirm. add_attendees adds guests to (or forwards) an existing event. create_event can repeat (recurrence: none/daily/weekly/weekdays/monthly).

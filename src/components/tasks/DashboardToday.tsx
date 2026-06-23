@@ -48,7 +48,8 @@ export default function DashboardToday({
 
   useEffect(() => {
     let live = true;
-    getTodayRows(today).then((r) => live && setRows(r));
+    const loadToday = () => getTodayRows(today).then((r) => live && setRows(r));
+    loadToday();
     getTodayRows(yesterday).then((r) => {
       if (!live) return;
       // Yesterday's planned tasks that still aren't done.
@@ -58,8 +59,10 @@ export default function DashboardToday({
       });
       setCarry(unfinished);
     });
+    window.addEventListener("sw-today-planned", loadToday); // Alfred set the day
     return () => {
       live = false;
+      window.removeEventListener("sw-today-planned", loadToday);
     };
   }, [today, yesterday, taskById]);
 
