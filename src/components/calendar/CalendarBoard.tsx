@@ -424,31 +424,50 @@ function NavArrow({ dir, disabled, onClick }: { dir: "prev" | "next"; disabled: 
 }
 
 function EventActions({ ev }: { ev: CalEventRaw }) {
+  const [declined, setDeclined] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // You can decline any meeting you're invited to (already accepted, tentative,
+  // or not-yet-responded) — not just pending invites.
+  const canDecline =
+    ev.myStatus === "accepted" || ev.myStatus === "tentative" || ev.myStatus === "needsAction";
+
+  async function decline() {
+    if (busy) return;
+    setBusy(true);
+    const r = await respondToEvent({ eventId: ev.id, response: "declined" });
+    setBusy(false);
+    if (r.ok) setDeclined(true);
+  }
+
+  if (declined) return <span className="shrink-0 text-xs font-medium text-red-600">Not attending</span>;
+
+  const link = "text-xs text-hint transition-colors hover:underline";
   return (
-    <div className="flex shrink-0 items-center gap-3">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
       {ev.joinUrl && <JoinButton url={ev.joinUrl} />}
       <button
         type="button"
-        onClick={() =>
-          summonAlfred(`Add someone to my meeting "${ev.title}". Please ask me who to add.`)
-        }
-        className="text-xs text-hint transition-colors hover:text-peri-deep hover:underline"
+        onClick={() => summonAlfred(`Add someone to my meeting "${ev.title}". Please ask me who to add.`)}
+        className={`${link} hover:text-peri-deep`}
       >
         Add people
       </button>
       <button
         type="button"
-        onClick={() =>
-          summonAlfred(`I'd like to reschedule my meeting "${ev.title}". Please ask me the new time.`)
-        }
-        className="text-xs text-hint transition-colors hover:text-peri-deep hover:underline"
+        onClick={() => summonAlfred(`I'd like to reschedule my meeting "${ev.title}". Please ask me the new time.`)}
+        className={`${link} hover:text-peri-deep`}
       >
         Reschedule
       </button>
+      {canDecline && (
+        <button type="button" onClick={decline} disabled={busy} className={`${link} hover:text-red-600 disabled:opacity-50`}>
+          {busy ? "…" : "Can't attend"}
+        </button>
+      )}
       <button
         type="button"
         onClick={() => summonAlfred(`Cancel my meeting "${ev.title}".`)}
-        className="text-xs text-hint transition-colors hover:text-red-600 hover:underline"
+        className={`${link} hover:text-red-600`}
       >
         Cancel
       </button>
