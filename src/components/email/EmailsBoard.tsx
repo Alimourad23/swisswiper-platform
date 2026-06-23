@@ -45,6 +45,28 @@ function fullTime(iso: string): string {
   return isNaN(d.getTime()) ? "" : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+/* Strip quoted reply history so the showcase + read-aloud is just the new
+   message, not the whole forwarded chain. */
+function cleanForReading(body: string): string {
+  let b = body.replace(/\r\n/g, "\n");
+  const cutPatterns = [
+    /\nOn .+wrote:/,
+    /\n_{5,}/,
+    /\n-{2,}\s*Original Message\s*-{2,}/i,
+    /\nFrom:\s.+\nSent:\s/i,
+    /\n\s*>/,
+  ];
+  for (const p of cutPatterns) {
+    const idx = b.search(p);
+    if (idx > 60) b = b.slice(0, idx);
+  }
+  b = b
+    .split("\n")
+    .filter((l) => !/^\s*>/.test(l))
+    .join("\n");
+  return b.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export default function EmailsBoard({ view }: { view: InboxView }) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -138,18 +160,21 @@ function EmailRow({ t, now }: { t: EmailThread; now: number }) {
     if (drafting) return;
     setDrafting(true);
     let seed = `Draft a reply to ${t.senderName} regarding "${t.subject}".`;
+    let showcase: { from: string; subject: string; body: string } | undefined;
     try {
       const r = await getEmailBody(t.id);
       if (r.ok && r.body) {
+        const clean = cleanForReading(r.body);
         seed =
           `Draft a reply to ${t.senderName} regarding "${t.subject}". ` +
           `Reply in context to their message below, in SwissWiper's voice.\n\n` +
-          `--- Their email ---\n${r.body}\n--- end ---`;
+          `--- Their email ---\n${clean}\n--- end ---`;
+        showcase = { from: t.senderName, subject: t.subject, body: clean };
       }
     } catch {
       /* fall back to the subject-only seed */
     }
-    window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { seed } }));
+    window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { seed, showcase } }));
     setDrafting(false);
   }
 

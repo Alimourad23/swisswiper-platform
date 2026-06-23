@@ -90,6 +90,7 @@ export default function AlfredChat({
   autoListenKey = 0,
   seed = "",
   seedKey = 0,
+  readAloud = "",
 }: {
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
@@ -104,6 +105,9 @@ export default function AlfredChat({
    *  the Emails page). When seedKey changes, `seed` is submitted to the brain. */
   seed?: string;
   seedKey?: number;
+  /** Text Alfred reads aloud BEFORE acting on the seed (e.g. the original email
+   *  in the full-screen reply composer). */
+  readAloud?: string;
 }) {
   const router = useRouter();
 
@@ -657,10 +661,14 @@ export default function AlfredChat({
 
   // Seeded request (e.g. the Emails page asking Alfred to draft a reply): submit
   // it to the brain as if the user said it, which opens the editable review.
+  // If `readAloud` is set (the full-screen composer), Alfred reads the original
+  // email aloud first, THEN drafts the reply.
   useEffect(() => {
     if (seedKey > 0 && active && seed.trim()) {
       onEngage?.();
-      sendRef.current?.(seed.trim());
+      const fire = () => sendRef.current?.(seed.trim());
+      if (readAloud.trim()) speakLine(readAloud.trim(), fire);
+      else fire();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedKey]);

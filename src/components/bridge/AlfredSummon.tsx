@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import AlfredOverlay from "@/components/bridge/AlfredOverlay";
+import AlfredOverlay, { type Showcase } from "@/components/bridge/AlfredOverlay";
 import { unlockAudio } from "@/lib/bridge/voice";
 
 /* Makes Alfred reachable from every dashboard page. Lives in the dashboard
@@ -43,6 +43,7 @@ export default function AlfredSummon() {
   const [autoListenKey, setAutoListenKey] = useState(0);
   const [seed, setSeed] = useState("");
   const [seedKey, setSeedKey] = useState(0);
+  const [showcase, setShowcase] = useState<Showcase | null>(null);
 
   useEffect(() => {
     try {
@@ -53,7 +54,10 @@ export default function AlfredSummon() {
     if (!recognitionCtor()) setWakeSupported(false);
   }, []);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    setOpen(false);
+    setShowcase(null); // next plain summon returns to the compact card
+  }, []);
 
   // The Overview hero orb (and anything else) summons Alfred via this event,
   // so the floating control can be hidden there without losing the overlay.
@@ -62,12 +66,17 @@ export default function AlfredSummon() {
       unlockAudio();
       setOpen(true);
       // A seeded summon (e.g. "Draft a reply to …" from the Emails page) submits
-      // straight to Alfred; a plain summon just opens and listens.
-      const detail = (e as CustomEvent).detail as { seed?: string } | undefined;
+      // straight to Alfred; a plain summon just opens and listens. A `showcase`
+      // turns it into the full-screen reply composer.
+      const detail = (e as CustomEvent).detail as
+        | { seed?: string; showcase?: Showcase }
+        | undefined;
       if (detail?.seed && detail.seed.trim()) {
         setSeed(detail.seed.trim());
+        setShowcase(detail.showcase ?? null);
         setSeedKey((k) => k + 1);
       } else {
+        setShowcase(null);
         setAutoListenKey((k) => k + 1);
       }
     }
@@ -209,7 +218,7 @@ export default function AlfredSummon() {
         </div>
       )}
 
-      <AlfredOverlay open={open} onClose={close} autoListenKey={autoListenKey} seed={seed} seedKey={seedKey} />
+      <AlfredOverlay open={open} onClose={close} autoListenKey={autoListenKey} seed={seed} seedKey={seedKey} showcase={showcase} />
     </>
   );
 }
