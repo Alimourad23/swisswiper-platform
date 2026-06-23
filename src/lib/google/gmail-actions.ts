@@ -146,6 +146,24 @@ export async function trashThread(threadId: string): Promise<Result> {
   return { ok: true };
 }
 
+/* Undo a Trash — restore the conversation from Trash back to the inbox. */
+export async function untrashThread(threadId: string): Promise<Result> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+  if (!threadId) return { ok: false, error: "no conversation specified." };
+
+  const res = await fetch(`${GMAIL}/threads/${encodeURIComponent(threadId)}/untrash`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.error("Gmail untrash failed:", res.status, await res.text().catch(() => ""));
+    return { ok: false, error: `Gmail returned ${res.status}.` };
+  }
+  return { ok: true };
+}
+
 /* Stage a brand-new draft in Gmail (never sent). */
 export async function createEmailDraft(input: {
   to: string;

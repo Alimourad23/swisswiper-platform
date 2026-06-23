@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EmailThread, InboxView } from "@/lib/google/gmail";
 import { PriorityPill, SafePill } from "@/components/Pill";
-import { getDraft, getEmailBody, trashThread } from "@/lib/google/gmail-actions";
+import { getDraft, getEmailBody, trashThread, untrashThread } from "@/lib/google/gmail-actions";
 import type { EmailDraftState } from "@/components/bridge/EmailReview";
 
 type RowState = { status: "draft" | "sent" | "cleared"; draft?: EmailDraftState };
@@ -189,6 +189,7 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [delErr, setDelErr] = useState<string | null>(null);
 
   // Move the whole conversation to Gmail Trash (recoverable).
@@ -201,6 +202,15 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
     setConfirmDel(false);
     if (r.ok) setDeleted(true);
     else setDelErr(r.error);
+  }
+
+  // Undo — restore the conversation from Trash back to the inbox.
+  async function undoTrash() {
+    if (undoing) return;
+    setUndoing(true);
+    const r = await untrashThread(t.threadId);
+    setUndoing(false);
+    if (r.ok) setDeleted(false);
   }
   // Status comes from this session's actions, else from an existing Gmail draft
   // detected on load (so it survives a refresh). A "cleared" sentinel (discarded
@@ -286,14 +296,24 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
           </span>{" "}
           · Moved to Trash
         </span>
-        <a
-          href="https://mail.google.com/mail/u/0/#trash"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 text-xs hover:underline"
-        >
-          Undo in Gmail ↗
-        </a>
+        <span className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={undoTrash}
+            disabled={undoing}
+            className="rounded-full bg-peri-soft px-2.5 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
+          >
+            {undoing ? "Restoring…" : "Undo"}
+          </button>
+          <a
+            href="https://mail.google.com/mail/u/0/#trash"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs hover:underline"
+          >
+            Trash ↗
+          </a>
+        </span>
       </li>
     );
   }
@@ -316,7 +336,15 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
           )}
           {status ? <StatusBadge status={status} /> : <Badge t={t} />}
         </div>
-        <p className="truncate text-sm text-muted">{t.subject}</p>
+        <a
+          href={t.gmailUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open in Gmail"
+          className="block truncate text-sm text-muted transition-colors hover:text-ink hover:underline"
+        >
+          {t.subject}
+        </a>
         {t.snippet && <p className="truncate text-sm text-hint">{t.snippet}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -328,7 +356,7 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
             type="button"
             onClick={reviewDraft}
             disabled={drafting}
-            className="text-xs font-medium text-amber-700 hover:underline disabled:opacity-50"
+            className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/25 disabled:opacity-50"
           >
             {drafting ? "Opening…" : "Review draft / send"}
           </button>
@@ -337,19 +365,11 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
             type="button"
             onClick={draftReply}
             disabled={drafting}
-            className="text-xs font-medium text-peri-deep hover:underline disabled:opacity-50"
+            className="rounded-full bg-peri-soft px-2.5 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
           >
             {drafting ? "Reading email…" : "Draft reply with Alfred"}
           </button>
         )}
-        <a
-          href={t.gmailUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-hint hover:underline"
-        >
-          Open in Gmail ↗
-        </a>
         {t.tag === "safe" &&
           (confirmDel ? (
             <span className="flex items-center gap-2 text-xs">
@@ -358,9 +378,9 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
                 type="button"
                 onClick={deleteRow}
                 disabled={deleting}
-                className="font-medium text-red-600 hover:underline disabled:opacity-50"
+                className="rounded-full bg-red-500/15 px-2.5 py-1 font-medium text-red-600 transition-colors hover:bg-red-500/25 disabled:opacity-50"
               >
-                {deleting ? "…" : "Yes"}
+                {deleting ? "…" : "Yes, Trash"}
               </button>
               <button type="button" onClick={() => setConfirmDel(false)} className="text-hint hover:underline">
                 No
@@ -370,11 +390,19 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
             <button
               type="button"
               onClick={() => setConfirmDel(true)}
-              className="text-xs text-hint transition-colors hover:text-red-600 hover:underline"
+              className="rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/20"
             >
               Move to Trash
             </button>
           ))}
+        <a
+          href={t.gmailUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-hint hover:underline"
+        >
+          Open in Gmail ↗
+        </a>
         {delErr && <span className="max-w-[14rem] text-right text-[11px] text-red-600">{delErr}</span>}
       </div>
     </li>
