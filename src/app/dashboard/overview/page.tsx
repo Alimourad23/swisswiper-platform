@@ -15,6 +15,7 @@ import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { windowAgg, decisionMakerShare } from "@/lib/linkedin/compute";
 import { getTasksData } from "@/lib/tasks/data";
 import TasksPulse from "@/components/tasks/TasksPulse";
+import DashboardToday from "@/components/tasks/DashboardToday";
 
 export const dynamic = "force-dynamic";
 
@@ -46,13 +47,13 @@ export default async function OverviewPage() {
       </section>
 
       <Suspense fallback={<OverviewSkeleton />}>
-        <OverviewBody />
+        <OverviewBody firstName={firstName} />
       </Suspense>
     </div>
   );
 }
 
-async function OverviewBody() {
+async function OverviewBody({ firstName }: { firstName: string }) {
   // Fetch the slow sources in parallel (token first, then the rest together).
   const token = await getGoogleAccessToken();
   const [gmail, calendar, liResult, tasksResult] = await Promise.all([
@@ -69,6 +70,21 @@ async function OverviewBody() {
 
   return (
     <>
+      {/* Today's plan — Alfred greets your day: showcase / create / continue */}
+      <section>
+        <Panel
+          title="Today's plan"
+          badges={
+            <>
+              <LivePill />
+              <ServiceBadge label="Alfred" />
+            </>
+          }
+        >
+          <DashboardToday tasks={tasks} userId={userId} firstName={firstName} />
+        </Panel>
+      </section>
+
       {/* KPI row — honest: no fake numbers until connected */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Unread email" value={gmail?.unread} />
