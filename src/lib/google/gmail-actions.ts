@@ -17,17 +17,21 @@ function b64url(s: string): string {
 
 function buildRaw(opts: {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
   inReplyTo?: string;
   references?: string;
 }): string {
-  const headers = [
-    `To: ${opts.to}`,
+  const headers = [`To: ${opts.to}`];
+  if (opts.cc?.trim()) headers.push(`Cc: ${opts.cc.trim()}`);
+  if (opts.bcc?.trim()) headers.push(`Bcc: ${opts.bcc.trim()}`);
+  headers.push(
     `Subject: ${opts.subject || "(no subject)"}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
-  ];
+  );
   if (opts.inReplyTo) headers.push(`In-Reply-To: ${opts.inReplyTo}`);
   if (opts.references) headers.push(`References: ${opts.references}`);
   return b64url(`${headers.join("\r\n")}\r\n\r\n${opts.body ?? ""}`);
@@ -36,6 +40,56 @@ function buildRaw(opts: {
 function extractEmail(value: string): string {
   const m = value.match(/<([^>]+)>/);
   return (m ? m[1] : value).trim();
+}
+
+/* Read the plain-text body of a message so Alfred can reply in context.
+   READ-ONLY (a GET). Walks the MIME parts, preferring text/plain, falling back
+   to stripped text/html. */
+type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
+
+function collectParts(p: Part | undefined, acc: { mime: string; data: string }[]) {
+  if (!p) return;
+  if (p.body?.data && (p.mimeType === "text/plain" || p.mimeType === "text/html")) {
+    acc.push({ mime: p.mimeType, data: p.body.data });
+  }
+  (p.parts ?? []).forEach((c) => collectParts(c, acc));
+}
+
+function decodePart(data: string): string {
+  try {
+    return Buffer.from(data, "base64url").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+export async function getEmailBody(
+  messageId: string,
+): Promise<{ ok: true; body: string; from: string; subject: string } | { ok: false; error: string }> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+
+  const res = await fetch(`${GMAIL}/messages/${messageId}?format=full`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return { ok: false, error: `Gmail returned ${res.status}.` };
+
+  const data = (await res.json()) as {
+    payload?: Part & { headers?: { name: string; value: string }[] };
+  };
+  const headers = data.payload?.headers ?? [];
+  const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+  const acc: { mime: string; data: string }[] = [];
+  collectParts(data.payload, acc);
+  const plain = acc.find((a) => a.mime === "text/plain");
+  let body = "";
+  if (plain) body = decodePart(plain.data);
+  else if (acc[0]) body = decodePart(acc[0].data).replace(/<[^>]+>/g, " ");
+
+  body = body.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000);
+  return { ok: true, body, from: get("From"), subject: get("Subject") };
 }
 
 /* Look up the original message's threading headers for a reply. */
@@ -71,6 +125,8 @@ async function replyContext(
 /* Stage a brand-new draft in Gmail (never sent). */
 export async function createEmailDraft(input: {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
 }): Promise<Result> {
@@ -78,7 +134,13 @@ export async function createEmailDraft(input: {
   if (!token) return { ok: false, error: "Google isn't connected." };
   if (!input.to?.trim()) return { ok: false, error: "a recipient is needed." };
 
-  const raw = buildRaw({ to: input.to.trim(), subject: input.subject ?? "", body: input.body ?? "" });
+  const raw = buildRaw({
+    to: input.to.trim(),
+    cc: input.cc,
+    bcc: input.bcc,
+    subject: input.subject ?? "",
+    body: input.body ?? "",
+  });
   const res = await fetch(`${GMAIL}/drafts`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -97,6 +159,8 @@ export async function createEmailDraft(input: {
 export async function createReplyDraft(input: {
   messageId: string;
   to?: string;
+  cc?: string;
+  bcc?: string;
   subject?: string;
   body: string;
 }): Promise<Result> {
@@ -108,6 +172,8 @@ export async function createReplyDraft(input: {
 
   const raw = buildRaw({
     to: input.to?.trim() || ctx.to,
+    cc: input.cc,
+    bcc: input.bcc,
     subject: input.subject?.trim() || ctx.subject,
     body: input.body ?? "",
     inReplyTo: ctx.inReplyTo,
@@ -130,6 +196,8 @@ export async function createReplyDraft(input: {
    With messageId it sends as a threaded reply; otherwise a new message. */
 export async function sendEmail(input: {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
   messageId?: string;
@@ -155,7 +223,15 @@ export async function sendEmail(input: {
   }
   if (!to.trim()) return { ok: false, error: "a recipient is needed." };
 
-  const raw = buildRaw({ to, subject, body: input.body ?? "", inReplyTo, references });
+  const raw = buildRaw({
+    to,
+    cc: input.cc,
+    bcc: input.bcc,
+    subject,
+    body: input.body ?? "",
+    inReplyTo,
+    references,
+  });
   const res = await fetch(`${GMAIL}/messages/send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

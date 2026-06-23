@@ -88,6 +88,8 @@ export default function AlfredChat({
   active = true,
   onDismiss,
   autoListenKey = 0,
+  seed = "",
+  seedKey = 0,
 }: {
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
@@ -98,6 +100,10 @@ export default function AlfredChat({
   active?: boolean;
   onDismiss?: () => void;
   autoListenKey?: number;
+  /** A request to send to Alfred automatically (e.g. "draft a reply to …" from
+   *  the Emails page). When seedKey changes, `seed` is submitted to the brain. */
+  seed?: string;
+  seedKey?: number;
 }) {
   const router = useRouter();
 
@@ -371,8 +377,8 @@ export default function AlfredChat({
     setBusy(true);
     try {
       const r = d.messageId
-        ? await createReplyDraft({ messageId: d.messageId, to: d.to, subject: d.subject, body: d.body })
-        : await createEmailDraft({ to: d.to, subject: d.subject, body: d.body });
+        ? await createReplyDraft({ messageId: d.messageId, to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body })
+        : await createEmailDraft({ to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body });
       finishWithResult(r.ok ? "I've drafted it in your Gmail." : `I couldn't draft it: ${r.error}`);
     } catch {
       finishWithResult("I couldn't do that with your email, I'm afraid.");
@@ -388,7 +394,7 @@ export default function AlfredChat({
     setEmailDraft(null);
     setBusy(true);
     try {
-      const r = await sendEmail({ to: d.to, subject: d.subject, body: d.body, messageId: d.messageId });
+      const r = await sendEmail({ to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body, messageId: d.messageId });
       finishWithResult(r.ok ? "Sent." : `I couldn't send it: ${r.error}`);
     } catch {
       finishWithResult("I couldn't send that, I'm afraid.");
@@ -644,6 +650,16 @@ export default function AlfredChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoListenKey]);
 
+  // Seeded request (e.g. the Emails page asking Alfred to draft a reply): submit
+  // it to the brain as if the user said it, which opens the editable review.
+  useEffect(() => {
+    if (seedKey > 0 && active && seed.trim()) {
+      onEngage?.();
+      sendRef.current?.(seed.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedKey]);
+
   // The mic doubles as a "done — go" button. Tapping while listening ends the
   // capture and acts immediately: confirm a pending review/action panel, else
   // submit whatever was just said to Alfred. (Saying nothing just stops.)
@@ -894,7 +910,15 @@ function interpretDraftReply(input: Record<string, unknown>, dir: Directory): In
   if (!email) return { error: "I couldn't find which email to reply to. Which one did you mean?" };
   const subject = /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`;
   return {
-    email: { to: email.fromEmail || email.from, subject, body: String(input.body ?? ""), messageId: email.messageId, fromName: email.from },
+    email: {
+      to: email.fromEmail || email.from,
+      cc: resolveRecipients(input.cc, dir),
+      bcc: resolveRecipients(input.bcc, dir),
+      subject,
+      body: String(input.body ?? ""),
+      messageId: email.messageId,
+      fromName: email.from,
+    },
     spoken: `I've drafted a reply to ${email.from}. Say send, save draft, redraft, or cancel.`,
   };
 }
@@ -903,7 +927,13 @@ function interpretDraftEmail(input: Record<string, unknown>, dir: Directory): In
   const rawTo = String(input.to ?? "").trim();
   const to = rawTo.includes("@") ? rawTo : resolveProfileEmail(rawTo, dir.profiles) || rawTo;
   return {
-    email: { to, subject: String(input.subject ?? ""), body: String(input.body ?? "") },
+    email: {
+      to,
+      cc: resolveRecipients(input.cc, dir),
+      bcc: resolveRecipients(input.bcc, dir),
+      subject: String(input.subject ?? ""),
+      body: String(input.body ?? ""),
+    },
     spoken: `I've drafted an email${to ? ` to ${shortRecipient(to)}` : ""}. Say send, save draft, redraft, or cancel.`,
   };
 }
@@ -916,14 +946,28 @@ function interpretSendEmail(input: Record<string, unknown>, dir: Directory): Int
     if (!email) return { error: "I couldn't find which email to send a reply to. Which one?" };
     const subject = /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`;
     return {
-      email: { to: email.fromEmail || email.from, subject, body, messageId: email.messageId, fromName: email.from },
+      email: {
+        to: email.fromEmail || email.from,
+        cc: resolveRecipients(input.cc, dir),
+        bcc: resolveRecipients(input.bcc, dir),
+        subject,
+        body,
+        messageId: email.messageId,
+        fromName: email.from,
+      },
       spoken: `Ready to reply to ${email.from}. Say send to send now, save draft, redraft, or cancel.`,
     };
   }
   const rawTo = String(input.to ?? "").trim();
   const to = rawTo.includes("@") ? rawTo : resolveProfileEmail(rawTo, dir.profiles) || rawTo;
   return {
-    email: { to, subject: String(input.subject ?? ""), body },
+    email: {
+      to,
+      cc: resolveRecipients(input.cc, dir),
+      bcc: resolveRecipients(input.bcc, dir),
+      subject: String(input.subject ?? ""),
+      body,
+    },
     spoken: `Ready to email${to ? ` ${shortRecipient(to)}` : ""}. Say send to send now, save draft, redraft, or cancel.`,
   };
 }
@@ -1047,6 +1091,27 @@ function resolveProfile(name: string, profiles: Person[]): Person | null {
 
 function resolveProfileEmail(name: string, profiles: Person[]): string {
   return resolveProfile(name, profiles)?.email ?? "";
+}
+
+/* Turn a Cc/Bcc value (array or comma string of emails or teammate names) into a
+   comma-separated list of real email addresses, resolving names via the
+   directory and dropping anything that can't be resolved. */
+function resolveRecipients(value: unknown, dir: Directory): string {
+  const tokens = Array.isArray(value)
+    ? value.map((v) => String(v ?? "").trim())
+    : String(value ?? "")
+        .split(",")
+        .map((s) => s.trim());
+  const out: string[] = [];
+  for (const tok of tokens.filter(Boolean)) {
+    if (tok.includes("@")) {
+      out.push(tok);
+      continue;
+    }
+    const email = resolveProfileEmail(tok, dir.profiles) || resolveEmail(tok, dir.emails)?.fromEmail || "";
+    if (email.includes("@")) out.push(email);
+  }
+  return out.join(", ");
 }
 
 function resolveTask(ref: string, openTasks: { id: string; title: string }[]): { id: string; title: string } | null {

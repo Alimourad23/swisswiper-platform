@@ -41,6 +41,8 @@ export default function AlfredSummon() {
   const [wake, setWake] = useState(false);
   const [wakeSupported, setWakeSupported] = useState(true);
   const [autoListenKey, setAutoListenKey] = useState(0);
+  const [seed, setSeed] = useState("");
+  const [seedKey, setSeedKey] = useState(0);
 
   useEffect(() => {
     try {
@@ -56,10 +58,18 @@ export default function AlfredSummon() {
   // The Overview hero orb (and anything else) summons Alfred via this event,
   // so the floating control can be hidden there without losing the overlay.
   useEffect(() => {
-    function onSummon() {
+    function onSummon(e: Event) {
       unlockAudio();
       setOpen(true);
-      setAutoListenKey((k) => k + 1);
+      // A seeded summon (e.g. "Draft a reply to …" from the Emails page) submits
+      // straight to Alfred; a plain summon just opens and listens.
+      const detail = (e as CustomEvent).detail as { seed?: string } | undefined;
+      if (detail?.seed && detail.seed.trim()) {
+        setSeed(detail.seed.trim());
+        setSeedKey((k) => k + 1);
+      } else {
+        setAutoListenKey((k) => k + 1);
+      }
     }
     window.addEventListener("sw-alfred-summon", onSummon);
     return () => window.removeEventListener("sw-alfred-summon", onSummon);
@@ -199,7 +209,7 @@ export default function AlfredSummon() {
         </div>
       )}
 
-      <AlfredOverlay open={open} onClose={close} autoListenKey={autoListenKey} />
+      <AlfredOverlay open={open} onClose={close} autoListenKey={autoListenKey} seed={seed} seedKey={seedKey} />
     </>
   );
 }

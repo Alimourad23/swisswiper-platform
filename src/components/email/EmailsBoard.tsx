@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EmailThread, InboxView } from "@/lib/google/gmail";
 import { PriorityPill, SafePill } from "@/components/Pill";
+import { getEmailBody } from "@/lib/google/gmail-actions";
 
 function deviceTimeZone(): string {
   try {
@@ -129,6 +130,29 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
 }
 
 function EmailRow({ t, now }: { t: EmailThread; now: number }) {
+  const [drafting, setDrafting] = useState(false);
+
+  // Read the real email body, then hand the whole thing to Alfred so he replies
+  // in context (and in SwissWiper's voice) — not from the subject line alone.
+  async function draftReply() {
+    if (drafting) return;
+    setDrafting(true);
+    let seed = `Draft a reply to ${t.senderName} regarding "${t.subject}".`;
+    try {
+      const r = await getEmailBody(t.id);
+      if (r.ok && r.body) {
+        seed =
+          `Draft a reply to ${t.senderName} regarding "${t.subject}". ` +
+          `Reply in context to their message below, in SwissWiper's voice.\n\n` +
+          `--- Their email ---\n${r.body}\n--- end ---`;
+      }
+    } catch {
+      /* fall back to the subject-only seed */
+    }
+    window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { seed } }));
+    setDrafting(false);
+  }
+
   return (
     <li className="flex items-start justify-between gap-4 border-t border-hairline px-6 py-3 first:border-t-0">
       <div className="min-w-0">
@@ -154,11 +178,19 @@ function EmailRow({ t, now }: { t: EmailThread; now: number }) {
         <span className="text-xs text-hint" title={fullTime(t.dateISO)}>
           {relativeTime(t.dateISO, now)}
         </span>
+        <button
+          type="button"
+          onClick={draftReply}
+          disabled={drafting}
+          className="text-xs font-medium text-peri-deep hover:underline disabled:opacity-50"
+        >
+          {drafting ? "Reading email…" : "Draft reply with Alfred"}
+        </button>
         <a
           href={t.gmailUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs font-medium text-peri-deep hover:underline"
+          className="text-xs text-hint hover:underline"
         >
           Open in Gmail ↗
         </a>

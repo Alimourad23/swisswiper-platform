@@ -77,6 +77,8 @@ const TOOLS: Anthropic.Tool[] = [
       properties: {
         emailRef: { type: "string", description: "Which email to reply to — the sender and/or subject." },
         body: { type: "string", description: "The reply text." },
+        cc: { type: "array", items: { type: "string" }, description: "Optional Cc — emails or teammate names." },
+        bcc: { type: "array", items: { type: "string" }, description: "Optional Bcc — emails or teammate names." },
       },
       required: ["emailRef", "body"],
     },
@@ -91,6 +93,8 @@ const TOOLS: Anthropic.Tool[] = [
         to: { type: "string", description: "Recipient — an email address, or a teammate's name." },
         subject: { type: "string" },
         body: { type: "string" },
+        cc: { type: "array", items: { type: "string" }, description: "Optional Cc — emails or teammate names." },
+        bcc: { type: "array", items: { type: "string" }, description: "Optional Bcc — emails or teammate names." },
       },
       required: ["to", "body"],
     },
@@ -106,6 +110,8 @@ const TOOLS: Anthropic.Tool[] = [
         to: { type: "string" },
         subject: { type: "string" },
         body: { type: "string" },
+        cc: { type: "array", items: { type: "string" }, description: "Optional Cc — emails or teammate names." },
+        bcc: { type: "array", items: { type: "string" }, description: "Optional Bcc — emails or teammate names." },
       },
       required: ["body"],
     },
@@ -232,6 +238,8 @@ Manner: warm, loyal, understated. A light, dry wit — never slapstick. Address 
 This is spoken aloud, so keep replies short — usually one or two sentences. Lead with the answer. No markdown, bullet points, or emoji — plain spoken English.
 
 Marketing: the LinkedIn figures in the briefing ARE the marketing performance data — answer "how's marketing?" from them.
+
+About SwissWiper (use this whenever you draft an email or answer about the company): SwissWiper is a luxury hard-water glass-care brand — a precision wiper and care system that keeps glass (shower screens, balustrades, facades) flawless in hard-water regions. Positioning is understated luxury: calm, exact, no hype. Voice when writing on ${firstName}'s behalf: refined, warm, confident, and brief; never use discounting or pushy sales language; prefer "commission" over "buy/order"; never qualify or undercut the price. ${firstName} is the founder. When you draft a reply, READ the original email provided to you and respond to its actual content in this voice, sign off as ${firstName} unless told otherwise, and keep it concise.
 
 You can take actions through tools. CRITICAL: to DO anything — create a task, draft or send an email, create/move/cancel a calendar event, mark a task done — you MUST call the matching tool. Acknowledging in words alone ("Very good, sir", "I'll draft that") does NOTHING — if you don't call the tool, nothing happens and the review panel never appears. So whenever ${firstName} clearly asks for one of these, CALL the tool in the same turn (you may also say a short proposal line). ALL tools except navigate are PROPOSALS: the app shows ${firstName} an editable review and he confirms (or says "yes") before anything happens — so phrase your spoken line as a proposal ("Shall I…?", "I've drafted…"), never as already done.
 - navigate(destination): immediate; give a brief spoken confirmation.

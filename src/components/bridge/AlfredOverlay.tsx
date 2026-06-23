@@ -17,10 +17,14 @@ export default function AlfredOverlay({
   open,
   onClose,
   autoListenKey = 0,
+  seed = "",
+  seedKey = 0,
 }: {
   open: boolean;
   onClose: () => void;
   autoListenKey?: number;
+  seed?: string;
+  seedKey?: number;
 }) {
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
@@ -77,6 +81,8 @@ export default function AlfredOverlay({
         <AlfredChat
           active={open}
           autoListenKey={autoListenKey}
+          seed={seed}
+          seedKey={seedKey}
           onDismiss={onClose}
           onSpeakingChange={setSpeaking}
           onListeningChange={setListening}
