@@ -396,6 +396,11 @@ export default function AlfredChat({
       const r = d.messageId
         ? await createReplyDraft({ messageId: d.messageId, to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body })
         : await createEmailDraft({ to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body });
+      if (r.ok && d.messageId) {
+        window.dispatchEvent(
+          new CustomEvent("sw-email-drafted", { detail: { messageId: d.messageId, status: "draft" } }),
+        );
+      }
       finishWithResult(r.ok ? "I've drafted it in your Gmail." : `I couldn't draft it: ${r.error}`);
     } catch {
       finishWithResult("I couldn't do that with your email, I'm afraid.");
@@ -412,6 +417,11 @@ export default function AlfredChat({
     setBusy(true);
     try {
       const r = await sendEmail({ to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body, messageId: d.messageId });
+      if (r.ok && d.messageId) {
+        window.dispatchEvent(
+          new CustomEvent("sw-email-drafted", { detail: { messageId: d.messageId, status: "sent" } }),
+        );
+      }
       finishWithResult(r.ok ? "Sent." : `I couldn't send it: ${r.error}`);
     } catch {
       finishWithResult("I couldn't send that, I'm afraid.");

@@ -82,6 +82,24 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
     return () => clearInterval(id);
   }, []);
 
+  // Rows Alfred has just drafted a reply to / replied to this session, so the
+  // status + dot update immediately (dispatched from the draft/send flow).
+  const [drafted, setDrafted] = useState<Record<string, "draft" | "sent">>({});
+  useEffect(() => {
+    function onDrafted(e: Event) {
+      const d = (e as CustomEvent).detail as
+        | { messageId?: string; status?: "draft" | "sent" }
+        | undefined;
+      if (d?.messageId && d.status) {
+        const id = d.messageId;
+        const status = d.status;
+        setDrafted((m) => ({ ...m, [id]: status }));
+      }
+    }
+    window.addEventListener("sw-email-drafted", onDrafted);
+    return () => window.removeEventListener("sw-email-drafted", onDrafted);
+  }, []);
+
   const tz = useMemo(() => deviceTimeZone(), []);
   const awaiting = view.threads.filter((t) => t.awaitingReply);
 
@@ -121,7 +139,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
         {awaiting.length > 0 ? (
           <ul>
             {awaiting.map((t) => (
-              <EmailRow key={t.id} t={t} now={now} />
+              <EmailRow key={t.id} t={t} now={now} status={drafted[t.id]} />
             ))}
           </ul>
         ) : (
@@ -143,7 +161,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
         {view.threads.length > 0 ? (
           <ul>
             {view.threads.map((t) => (
-              <EmailRow key={t.id} t={t} now={now} />
+              <EmailRow key={t.id} t={t} now={now} status={drafted[t.id]} />
             ))}
           </ul>
         ) : (
@@ -158,8 +176,9 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
   );
 }
 
-function EmailRow({ t, now }: { t: EmailThread; now: number }) {
+function EmailRow({ t, now, status }: { t: EmailThread; now: number; status?: "draft" | "sent" }) {
   const [drafting, setDrafting] = useState(false);
+  const dotClass = status === "sent" ? "bg-emerald-500" : status === "draft" ? "bg-amber-500" : "bg-peri-deep";
 
   // Read the real email body, then hand the whole thing to Alfred so he replies
   // in context (and in SwissWiper's voice) — not from the subject line alone.
@@ -189,8 +208,8 @@ function EmailRow({ t, now }: { t: EmailThread; now: number }) {
     <li className="flex items-start justify-between gap-4 border-t border-hairline px-6 py-3 first:border-t-0">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          {t.unread && (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-peri-deep" aria-label="unread" />
+          {(t.unread || status) && (
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} aria-label={status ?? "unread"} />
           )}
           <span className="truncate text-sm font-medium text-ink">{t.senderName}</span>
           {t.msgCount > 1 && (
@@ -201,7 +220,7 @@ function EmailRow({ t, now }: { t: EmailThread; now: number }) {
               {t.msgCount}
             </span>
           )}
-          <Badge t={t} />
+          {status ? <StatusBadge status={status} /> : <Badge t={t} />}
         </div>
         <p className="truncate text-sm text-muted">{t.subject}</p>
         {t.snippet && <p className="truncate text-sm text-hint">{t.snippet}</p>}
@@ -245,4 +264,19 @@ function Badge({ t }: { t: EmailThread }) {
   if (t.tag === "priority") return <PriorityPill />;
   if (t.tag === "safe") return <SafePill />;
   return null;
+}
+
+function StatusBadge({ status }: { status: "draft" | "sent" }) {
+  if (status === "sent") {
+    return (
+      <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-500/12 px-2 py-0.5 text-[11px] font-medium leading-none text-emerald-700">
+        Replied
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium leading-none text-amber-700">
+      Draft ready · review or send
+    </span>
+  );
 }
