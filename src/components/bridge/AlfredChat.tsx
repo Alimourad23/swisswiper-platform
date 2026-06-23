@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { speak, stopSpeaking, unlockAudio } from "@/lib/bridge/voice";
 import { createTask, setStatus } from "@/lib/tasks/actions";
 import { createEmailDraft, createReplyDraft, deleteDraft, sendEmail } from "@/lib/google/gmail-actions";
-import { createEvent, rescheduleEvent, cancelEvent } from "@/lib/google/calendar-actions";
+import { createEvent, rescheduleEvent, cancelEvent, addAttendees } from "@/lib/google/calendar-actions";
 import { dateInputToIso } from "@/lib/tasks/format";
 import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
 import ActionPanel, { type PanelOption } from "@/components/bridge/ActionPanel";
@@ -931,6 +931,8 @@ function interpret(act: ActionCall, dir: Directory): Interpretation {
       return interpretReschedule(input, dir);
     case "cancel_event":
       return interpretCancel(input, dir);
+    case "add_attendees":
+      return interpretAddAttendees(input, dir);
     default:
       return {};
   }
@@ -1197,6 +1199,50 @@ function interpretCancel(input: Record<string, unknown>, dir: Directory): Interp
       },
     },
     spoken: `Shall I cancel ${ev.title} on ${ev.when}? Say confirm or cancel.`,
+  };
+}
+
+function interpretAddAttendees(input: Record<string, unknown>, dir: Directory): Interpretation {
+  const ev = resolveEvent(String(input.eventRef ?? "").trim(), dir.events);
+  if (!ev) return { error: "I couldn't find which meeting to add people to. Which one did you mean?" };
+
+  const raw = Array.isArray(input.attendees)
+    ? (input.attendees as unknown[]).map((a) => String(a ?? "").trim()).filter(Boolean)
+    : [];
+  const emails: string[] = [];
+  const unresolved: string[] = [];
+  for (const a of raw) {
+    if (a.includes("@")) {
+      emails.push(a);
+      continue;
+    }
+    const e = resolveProfileEmail(a, dir.profiles) || resolveEmail(a, dir.emails)?.fromEmail || "";
+    if (e.includes("@")) emails.push(e);
+    else unresolved.push(a);
+  }
+  if (!emails.length) {
+    return {
+      error: unresolved.length
+        ? `I couldn't find an email for ${unresolved.join(" or ")}.`
+        : "Who would you like me to add?",
+    };
+  }
+
+  const names = emails.map(shortRecipient).join(", ");
+  const note = unresolved.length ? ` (I couldn't find an address for ${unresolved.join(" or ")}.)` : "";
+  return {
+    confirm: {
+      description: `Add ${names} to “${ev.title}” (${ev.when}).`,
+      run: async () => {
+        try {
+          const r = await addAttendees({ eventId: ev.id, emails });
+          return r.ok ? `Done — I've added ${names} to “${ev.title}”.` : `I couldn't add them: ${r.error}`;
+        } catch {
+          return "I couldn't do that, I'm afraid.";
+        }
+      },
+    },
+    spoken: `Add ${names} to ${ev.title}?${note} Say confirm or cancel.`,
   };
 }
 

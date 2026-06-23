@@ -164,6 +164,19 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["eventRef"],
     },
   },
+  {
+    name: "add_attendees",
+    description:
+      "Add people to (or forward an invite for) an existing event — adds them as guests and sends the invitation. A proposal; the app confirms. Match eventRef to an upcoming event.",
+    input_schema: {
+      type: "object",
+      properties: {
+        eventRef: { type: "string", description: "Which event — its title and/or time." },
+        attendees: { type: "array", items: { type: "string" }, description: "Emails or teammate names to add." },
+      },
+      required: ["eventRef", "attendees"],
+    },
+  },
 ];
 
 export async function POST(req: Request) {
@@ -252,7 +265,7 @@ You can take actions through tools. CRITICAL: to DO anything — create a task, 
 - create_task / set_task_status: the team to-do. Real teammates only (roster below); absolute YYYY-MM-DD due dates (today is ${todayIso}).
 - draft_reply / draft_email: compose email saved as a DRAFT in Gmail — you do NOT send. After confirming, say "I've drafted it in your Gmail." Match emailRef to a recent email below. When the user's message includes the original email text, your SPOKEN reply for the proposal should: (1) in one short sentence, say what their email is about; (2) read your drafted reply aloud; (3) offer "Shall I send it, save it as a draft, redraft, or cancel?". Keep it natural, not robotic. You can also be asked to add/remove/move recipients between To, Cc and Bcc — use the cc/bcc fields (names or emails) and keep the rest of the draft intact.
 - send_email: actually SENDS — use ONLY when ${firstName} clearly says to send it. Default to drafting; the app confirms sending separately.
-- create_event / reschedule_event / cancel_event: the primary calendar. Times are ISO 8601 local in ${firstName}'s timezone (e.g. 2026-06-22T15:00). Match eventRef to an upcoming event below. Cancelling needs a clear confirm.
+- create_event / reschedule_event / cancel_event / add_attendees: the primary calendar. Times are ISO 8601 local in ${firstName}'s timezone (e.g. 2026-06-22T15:00). Match eventRef to an upcoming event below. Cancelling needs a clear confirm. add_attendees adds guests to (or forwards) an existing event. create_event can repeat (recurrence: none/daily/weekly/weekdays/monthly).
 If you're unsure which person, email, task, or event is meant, ASK rather than guess. If Gmail/Calendar isn't connected, say so.
 
 Revising a proposal: when ${firstName} is reviewing a proposal and asks for a change in plain language (e.g. "make it friendlier", "mention his holiday", "make it shorter", "change the due date to Monday", "add Etienne too"), re-call the SAME tool with the change applied to the current values you're given, and briefly acknowledge it naturally (e.g. "Of course — warming it up." or "Done — due Monday now."). Keep replies to that one short sentence; the app re-shows the updated review. If instead they ask something unrelated while reviewing, just answer them — the review stays open.

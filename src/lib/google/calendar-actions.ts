@@ -153,6 +153,40 @@ export async function respondToEvent(input: {
   return { ok: true };
 }
 
+/* Add people to (or forward an invite for) an existing event — appends new
+   guests (de-duped) and sends them the invitation. */
+export async function addAttendees(input: { eventId: string; emails: string[] }): Promise<Result> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+  const add = input.emails.map((e) => e.trim()).filter((e) => e.includes("@"));
+  if (!add.length) return { ok: false, error: "no valid email to add." };
+
+  const getRes = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!getRes.ok) return { ok: false, error: `Calendar returned ${getRes.status}.` };
+  const ev = (await getRes.json()) as { attendees?: { email?: string }[] };
+  const existing = ev.attendees ?? [];
+  const have = new Set(existing.map((a) => (a.email ?? "").toLowerCase()));
+  const merged = [
+    ...existing,
+    ...add.filter((e) => !have.has(e.toLowerCase())).map((email) => ({ email })),
+  ];
+
+  const res = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}?sendUpdates=all`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ attendees: merged }),
+  });
+  if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.error("Calendar add-attendees failed:", res.status, await res.text().catch(() => ""));
+    return { ok: false, error: `Calendar returned ${res.status}.` };
+  }
+  return { ok: true };
+}
+
 export async function cancelEvent(input: { eventId: string }): Promise<Result> {
   const token = await getGoogleAccessToken();
   if (!token) return { ok: false, error: "Google isn't connected." };

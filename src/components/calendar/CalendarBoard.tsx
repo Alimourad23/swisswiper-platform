@@ -17,7 +17,10 @@ import {
   todayLoad,
   formatHours,
   clockLabel,
+  weekLoad,
+  weekdayShort,
   type DayLoad,
+  type WeekLoad,
 } from "@/lib/calendar-view";
 
 type DayBucket = { key: string; label: string; meetings: CalEventRaw[]; reminders: CalEventRaw[] };
@@ -87,6 +90,7 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
       load: todayLoad(todayMeetings, now),
       tomorrow: days0[1],
       pending: events.filter((e) => e.myStatus === "needsAction"),
+      weekLoad: weekLoad(days0),
     };
   }, [events, now, weekOffset]);
 
@@ -118,6 +122,8 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
         <Stat label="Meetings this week" value={model.meetingsThisWeek} />
         <LoadCard load={model.load} conflicts={model.conflicts} />
       </section>
+
+      <WeekLoadCard data={model.weekLoad} />
 
       {model.pending.length > 0 && <PendingInvites items={model.pending} now={now} />}
 
@@ -368,6 +374,39 @@ function ReminderRow({ ev }: { ev: CalEventRaw }) {
   );
 }
 
+function WeekLoadCard({ data }: { data: WeekLoad }) {
+  const max = Math.max(1, ...data.perDay.map((d) => d.hours));
+  return (
+    <div className="sw-card px-6 py-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm text-muted">Meeting load · this week</span>
+        <span className="text-sm text-ink">
+          {data.hours.toFixed(1)}h · {data.pct}% of your week
+        </span>
+      </div>
+      <p className="mt-0.5 text-sm text-muted">
+        {data.busiestHours > 0
+          ? `Busiest ${data.busiestLabel} (${data.busiestHours.toFixed(1)}h)`
+          : "A light week"}
+        {data.backToBack > 0 ? ` · ${data.backToBack} back-to-back` : ""}
+      </p>
+      <div className="mt-3 flex items-end gap-2">
+        {data.perDay.map((d) => (
+          <div key={d.key} className="flex flex-1 flex-col items-center gap-1">
+            <div className="flex h-14 w-full items-end">
+              <div
+                className="w-full rounded-t-sm bg-peri-deep/70"
+                style={{ height: `${Math.round((d.hours / max) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-hint">{weekdayShort(d.key)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function NavArrow({ dir, disabled, onClick }: { dir: "prev" | "next"; disabled: boolean; onClick: () => void }) {
   return (
     <button
@@ -388,6 +427,15 @@ function EventActions({ ev }: { ev: CalEventRaw }) {
   return (
     <div className="flex shrink-0 items-center gap-3">
       {ev.joinUrl && <JoinButton url={ev.joinUrl} />}
+      <button
+        type="button"
+        onClick={() =>
+          summonAlfred(`Add someone to my meeting "${ev.title}". Please ask me who to add.`)
+        }
+        className="text-xs text-hint transition-colors hover:text-peri-deep hover:underline"
+      >
+        Add people
+      </button>
       <button
         type="button"
         onClick={() =>

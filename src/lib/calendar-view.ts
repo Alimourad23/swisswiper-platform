@@ -179,3 +179,49 @@ export function formatHours(h: number): string {
 export function clockLabel(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
+
+export function weekdayShort(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString([], { weekday: "narrow" });
+}
+
+export type WeekLoad = {
+  hours: number; // total meeting hours this week
+  pct: number; // % of a ~40h working week
+  busiestLabel: string;
+  busiestHours: number;
+  backToBack: number; // meeting transitions with < 10 min gap
+  perDay: { key: string; hours: number }[];
+};
+
+/* Meeting-load insight for a week of day buckets (timed meetings only). */
+export function weekLoad(
+  days: { key: string; label: string; meetings: CalEventRaw[] }[],
+): WeekLoad {
+  let total = 0;
+  let backToBack = 0;
+  let busiest = { label: "", hours: 0 };
+
+  const perDay = days.map((d) => {
+    const timed = d.meetings
+      .filter((m) => m.startDateTime && m.endDateTime)
+      .sort((a, b) => startMs(a) - startMs(b));
+    const hours = timed.reduce((n, m) => n + Math.max(0, endMs(m) - startMs(m)), 0) / 3600000;
+    total += hours;
+    if (hours > busiest.hours) busiest = { label: d.label, hours };
+    for (let i = 1; i < timed.length; i++) {
+      const gap = startMs(timed[i]) - endMs(timed[i - 1]);
+      if (gap >= 0 && gap < 10 * 60000) backToBack++;
+    }
+    return { key: d.key, hours };
+  });
+
+  return {
+    hours: total,
+    pct: Math.round((total / 40) * 100),
+    busiestLabel: busiest.label,
+    busiestHours: busiest.hours,
+    backToBack,
+    perDay,
+  };
+}
