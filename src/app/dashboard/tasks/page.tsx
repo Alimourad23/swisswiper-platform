@@ -1,5 +1,6 @@
 import ModuleHeader from "@/components/ModuleHeader";
 import TasksBoard from "@/components/tasks/TasksBoard";
+import TodayPlan from "@/components/tasks/TodayPlan";
 import { getModule } from "@/lib/modules";
 import { getTasksData } from "@/lib/tasks/data";
 
@@ -29,6 +30,8 @@ export default async function TasksPage({
         subtitle="A shared to-do list for the team. Assign, track and get notified — live for everyone."
         right={<span className="text-xs text-hint">{activeCount} task{activeCount === 1 ? "" : "s"}</span>}
       />
+      <TodayPlan tasks={tasks} userId={userId} />
+
       <TasksBoard
         initialTasks={tasks}
         profiles={profiles}
