@@ -282,10 +282,15 @@ export default function AlfredChat({
               confirmRef.current = built.confirm;
               setConfirm(built.confirm);
             }
-            // On an EDIT (a panel was already open) prefer Alfred's natural
-            // acknowledgement; on the FIRST proposal use the deterministic
-            // summary (which echoes the parsed values + the menu).
-            spoken = hadPending && modelText ? modelText : built.spoken ?? modelText;
+            // For EMAIL drafts, prefer Alfred's spoken narration (he summarises
+            // the incoming email and reads the draft aloud — see the system
+            // prompt). For other actions: on an EDIT prefer his natural
+            // acknowledgement; on a FIRST proposal use the deterministic summary.
+            if (built.email) {
+              spoken = modelText || built.spoken || "";
+            } else {
+              spoken = hadPending && modelText ? modelText : built.spoken ?? modelText;
+            }
           }
         }
         // (No actionable tool + a panel was open → keep the panel, just answer.)
@@ -666,16 +671,10 @@ export default function AlfredChat({
   function toggleMic() {
     unlockAudio(); // this tap is a user gesture — unlock ElevenLabs playback
     if (listening) {
-      // A panel is already up → confirm/execute its primary action.
-      if (hasPending()) {
-        if (taskRef.current) void submitTask();
-        else if (emailRefState.current) void submitEmailDraft();
-        else if (eventRefState.current) void submitEvent();
-        else if (confirmRef.current) void doConfirm();
-        return;
-      }
-      // Otherwise finalise the current speech and submit it (handled in onend).
-      tapGoRef.current = true;
+      // Tapping the mic ONLY stops listening — it never confirms an action or
+      // closes the dialogue. Confirm with the buttons (or voice); close with ×.
+      clearSilenceTimer();
+      stoppingRef.current = true; // suppress auto-resume; just go quiet
       if (recRef.current) recRef.current.stop();
       else setListening(false);
       return;
@@ -712,9 +711,7 @@ export default function AlfredChat({
     : error
       ? ""
       : listening
-        ? panelOpen
-          ? "Listening — tap to confirm, or say “that’s all”"
-          : "Listening — tap when done, or say “that’s all”"
+        ? "Listening — tap the mic to stop, or say “that’s all”"
         : busy
           ? "One moment…"
           : panelOpen
@@ -793,7 +790,7 @@ export default function AlfredChat({
         type="button"
         onClick={toggleMic}
         disabled={!supported || busy}
-        aria-label={listening ? "Done — submit" : "Talk to Alfred"}
+        aria-label={listening ? "Stop listening" : "Talk to Alfred"}
         aria-pressed={listening}
         className={[
           "group relative grid h-14 w-14 place-items-center rounded-full border transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8e9ae0]/40 disabled:opacity-40",
@@ -1065,7 +1062,9 @@ function buildPendingMessage(
   if (pend.email) {
     const e = pend.email;
     const kind = e.messageId ? `reply to ${e.fromName || e.to}` : `email to ${e.to}`;
-    return `I'm reviewing a draft ${kind}, subject "${e.subject}", body: "${e.body}". I said: "${u}". If that's an edit, re-propose the same email (draft_reply/draft_email) with it applied. Otherwise just answer me.`;
+    return `I'm reviewing a draft ${kind}. Current recipients — To: ${e.to || "none"}; Cc: ${
+      e.cc || "none"
+    }; Bcc: ${e.bcc || "none"}. Subject: "${e.subject}". Body: "${e.body}". I said: "${u}". If that's an edit — including adding, removing, or moving a recipient between To/Cc/Bcc (e.g. "cc Etienne", "add Bruno", "move Etienne to bcc") — re-propose the SAME email (draft_reply/draft_email) with the change applied, KEEPING the other fields and the existing recipients unless I asked to change them (pass the full To/Cc/Bcc lists). Otherwise just answer me.`;
   }
   if (pend.event) {
     const v = pend.event;
