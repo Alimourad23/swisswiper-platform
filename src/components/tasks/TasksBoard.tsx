@@ -115,6 +115,9 @@ export default function TasksBoard({
       list = list.filter((t) => t.status !== "done" && isOverdue(t.due_at, now));
     else if (scope === "week")
       list = list.filter((t) => t.status !== "done" && isDueThisWeek(t.due_at, now));
+    // Personal "to-dos" are your private lane — they live in "Mine" and Today,
+    // never on the shared company board / All view.
+    if (scope !== "mine") list = list.filter((t) => t.visibility !== "personal");
     if (tag !== "all") list = list.filter((t) => t.tags.includes(tag));
     if (assignee !== "all") list = list.filter((t) => t.assignees.includes(assignee));
 
@@ -378,7 +381,7 @@ function Badges({ task }: { task: Task }) {
     <>
       {task.visibility === "personal" && (
         <span className="rounded-full bg-line px-2 py-0.5 text-[11px] font-medium leading-none text-hint">
-          Personal
+          To-do
         </span>
       )}
       {task.visibility === "founders" && (

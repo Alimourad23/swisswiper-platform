@@ -26,7 +26,14 @@ type Lite = { id: string; title: string; status: TaskStatus };
 
 export default function TodayPlan({ tasks, userId }: { tasks: Task[]; userId: string | null }) {
   const [date] = useState(localDate);
+  const yesterday = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }, []);
   const [rows, setRows] = useState<PlanRow[] | null>(null);
+  const [carryRows, setCarryRows] = useState<PlanRow[]>([]);
   const [localStatus, setLocalStatus] = useState<Record<string, TaskStatus>>({});
   const [extra, setExtra] = useState<Record<string, Lite>>({}); // to-dos created here
   const [draft, setDraft] = useState("");
@@ -37,12 +44,13 @@ export default function TodayPlan({ tasks, userId }: { tasks: Task[]; userId: st
     let live = true;
     const load = () => getTodayRows(date).then((r) => live && setRows(r));
     load();
+    getTodayRows(yesterday).then((r) => live && setCarryRows(r));
     window.addEventListener("sw-today-planned", load); // Alfred set the day
     return () => {
       live = false;
       window.removeEventListener("sw-today-planned", load);
     };
-  }, [date]);
+  }, [date, yesterday]);
 
   // Merge team tasks with to-dos written right here.
   const liteById = useMemo(() => {
@@ -65,13 +73,27 @@ export default function TodayPlan({ tasks, userId }: { tasks: Task[]; userId: st
   const fill = Math.min(plannedMin / TARGET_MIN, 1) * 100;
 
   const plannedIds = new Set(items.map((i) => i.t.id));
+  const mine = (t: Task) => t.created_by === userId || t.assignees.includes(userId ?? "");
   const candidates = tasks.filter(
-    (t) =>
-      !t.deleted_at &&
-      t.status !== "done" &&
-      !plannedIds.has(t.id) &&
-      (t.created_by === userId || t.assignees.includes(userId ?? "")),
+    (t) => !t.deleted_at && t.status !== "done" && !plannedIds.has(t.id) && mine(t),
   );
+
+  // Suggestions: tasks due today, and yesterday's unfinished, not already planned.
+  const isToday = (due: string | null) => {
+    if (!due) return false;
+    const d = new Date(due);
+    const n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  };
+  const dueToday = tasks.filter(
+    (t) => !t.deleted_at && t.status !== "done" && !plannedIds.has(t.id) && mine(t) && isToday(t.due_at),
+  );
+  const carryItems = carryRows
+    .map((r) => ({ row: r, t: liteById.get(r.task_id) }))
+    .filter(
+      (x): x is { row: PlanRow; t: Lite } =>
+        !!x.t && x.t.status !== "done" && statusOf(x.t.id) !== "done" && !plannedIds.has(x.t.id),
+    );
 
   // ── Actions ──
   async function addOwnTodo() {
@@ -91,6 +113,25 @@ export default function TodayPlan({ tasks, userId }: { tasks: Task[]; userId: st
     setRows((rs) => [...(rs ?? []), { task_id: taskId, estimate_min: 30, sort_order: rs?.length ?? 0 }]);
     setPicking(false);
     await planToday(taskId, date, 30);
+  }
+  async function addDueToday() {
+    if (!dueToday.length) return;
+    const base = rows?.length ?? 0;
+    setRows((rs) => [
+      ...(rs ?? []),
+      ...dueToday.map((t, i) => ({ task_id: t.id, estimate_min: 30, sort_order: base + i })),
+    ]);
+    await Promise.all(dueToday.map((t) => planToday(t.id, date, 30)));
+  }
+  async function doCarry() {
+    if (!carryItems.length) return;
+    const base = rows?.length ?? 0;
+    setRows((rs) => [
+      ...(rs ?? []),
+      ...carryItems.map((c, i) => ({ task_id: c.t.id, estimate_min: c.row.estimate_min, sort_order: base + i })),
+    ]);
+    await Promise.all(carryItems.map((c) => planToday(c.t.id, date, c.row.estimate_min)));
+    setCarryRows([]);
   }
   async function remove(taskId: string) {
     setRows((rs) => (rs ?? []).filter((x) => x.task_id !== taskId));
@@ -145,6 +186,30 @@ export default function TodayPlan({ tasks, userId }: { tasks: Task[]; userId: st
             : `${fmtH(plannedMin)} of a ~6h day planned.`}
         </p>
       </div>
+
+      {/* Suggestions — due today / carry yesterday's unfinished */}
+      {(dueToday.length > 0 || carryItems.length > 0) && (
+        <div className="flex flex-wrap gap-2 px-6 pt-3">
+          {dueToday.length > 0 && (
+            <button
+              type="button"
+              onClick={addDueToday}
+              className="rounded-full bg-bg px-3 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95"
+            >
+              + Add {dueToday.length} due today
+            </button>
+          )}
+          {carryItems.length > 0 && (
+            <button
+              type="button"
+              onClick={doCarry}
+              className="rounded-full bg-bg px-3 py-1 text-xs font-medium text-amber-700 transition-colors hover:brightness-95"
+            >
+              ↩ Carry {carryItems.length} from yesterday
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Write your own to-do */}
       <div className="px-6 pt-4">

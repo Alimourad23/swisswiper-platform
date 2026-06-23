@@ -29,8 +29,8 @@ export default function VisibilitySelect({
       aria-label="Visibility"
       className={`rounded-[var(--radius-control)] border border-hairline bg-surface px-2.5 py-2 text-sm text-muted focus:outline-none focus:ring-1 focus:ring-peri ${className}`}
     >
-      <option value="team">Team</option>
-      <option value="personal">Personal</option>
+      <option value="team">Team task</option>
+      <option value="personal">My to-do</option>
       {showFounders && <option value="founders">Founders</option>}
     </select>
   );
