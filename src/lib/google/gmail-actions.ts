@@ -10,6 +10,7 @@ import { getGoogleAccessToken } from "@/lib/google/tokens";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 type Result = { ok: true } | { ok: false; error: string };
+type DraftResult = { ok: true; draftId?: string } | { ok: false; error: string };
 
 function b64url(s: string): string {
   return Buffer.from(s, "utf8").toString("base64url");
@@ -122,6 +123,29 @@ async function replyContext(
   };
 }
 
+/* Move a whole conversation to Gmail Trash — RECOVERABLE (Gmail keeps trashed
+   mail ~30 days). Requires the gmail.modify scope; a 403 means it hasn't been
+   granted yet (reconnect Google). Nothing is ever permanently deleted here. */
+export async function trashThread(threadId: string): Promise<Result> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+  if (!threadId) return { ok: false, error: "no conversation specified." };
+
+  const res = await fetch(`${GMAIL}/threads/${encodeURIComponent(threadId)}/trash`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.error("Gmail trash failed:", res.status, await res.text().catch(() => ""));
+    if (res.status === 403) {
+      return { ok: false, error: "I don't have permission to move mail to Trash yet — reconnect Google to grant it." };
+    }
+    return { ok: false, error: `Gmail returned ${res.status}.` };
+  }
+  return { ok: true };
+}
+
 /* Stage a brand-new draft in Gmail (never sent). */
 export async function createEmailDraft(input: {
   to: string;
@@ -129,7 +153,7 @@ export async function createEmailDraft(input: {
   bcc?: string;
   subject: string;
   body: string;
-}): Promise<Result> {
+}): Promise<DraftResult> {
   const token = await getGoogleAccessToken();
   if (!token) return { ok: false, error: "Google isn't connected." };
   if (!input.to?.trim()) return { ok: false, error: "a recipient is needed." };
@@ -151,7 +175,8 @@ export async function createEmailDraft(input: {
     console.error("Gmail draft failed:", res.status, await res.text().catch(() => ""));
     return { ok: false, error: `Gmail returned ${res.status}.` };
   }
-  return { ok: true };
+  const data = (await res.json().catch(() => ({}))) as { id?: string };
+  return { ok: true, draftId: data.id };
 }
 
 /* Stage a reply draft threaded to the original message (never sent). The user's
@@ -163,7 +188,7 @@ export async function createReplyDraft(input: {
   bcc?: string;
   subject?: string;
   body: string;
-}): Promise<Result> {
+}): Promise<DraftResult> {
   const token = await getGoogleAccessToken();
   if (!token) return { ok: false, error: "Google isn't connected." };
 
@@ -187,6 +212,26 @@ export async function createReplyDraft(input: {
   if (!res.ok) {
     // eslint-disable-next-line no-console
     console.error("Gmail reply draft failed:", res.status, await res.text().catch(() => ""));
+    return { ok: false, error: `Gmail returned ${res.status}.` };
+  }
+  const data = (await res.json().catch(() => ({}))) as { id?: string };
+  return { ok: true, draftId: data.id };
+}
+
+/* Delete a Gmail draft (used by "Discard"). gmail.compose covers draft
+   deletion, so no extra permission is needed. The original email is untouched
+   and stays unread. */
+export async function deleteDraft(draftId: string): Promise<Result> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+  if (!draftId) return { ok: false, error: "no draft specified." };
+  const res = await fetch(`${GMAIL}/drafts/${encodeURIComponent(draftId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    // eslint-disable-next-line no-console
+    console.error("Gmail draft delete failed:", res.status, await res.text().catch(() => ""));
     return { ok: false, error: `Gmail returned ${res.status}.` };
   }
   return { ok: true };

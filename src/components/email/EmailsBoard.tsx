@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { EmailThread, InboxView } from "@/lib/google/gmail";
 import { PriorityPill, SafePill } from "@/components/Pill";
 import { getEmailBody } from "@/lib/google/gmail-actions";
+import type { EmailDraftState } from "@/components/bridge/EmailReview";
+
+type RowState = { status: "draft" | "sent"; draft?: EmailDraftState };
 
 function deviceTimeZone(): string {
   try {
@@ -82,18 +85,26 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
     return () => clearInterval(id);
   }, []);
 
-  // Rows Alfred has just drafted a reply to / replied to this session, so the
-  // status + dot update immediately (dispatched from the draft/send flow).
-  const [drafted, setDrafted] = useState<Record<string, "draft" | "sent">>({});
+  // Rows Alfred has drafted a reply to / replied to this session, so the status,
+  // dot and the saved draft (for re-opening) update immediately. Dispatched from
+  // the draft / send / discard flow.
+  const [drafted, setDrafted] = useState<Record<string, RowState>>({});
   useEffect(() => {
     function onDrafted(e: Event) {
       const d = (e as CustomEvent).detail as
-        | { messageId?: string; status?: "draft" | "sent" }
+        | { messageId?: string; status?: "draft" | "sent" | "cleared"; draft?: EmailDraftState }
         | undefined;
-      if (d?.messageId && d.status) {
-        const id = d.messageId;
+      if (!d?.messageId) return;
+      const id = d.messageId;
+      if (d.status === "cleared") {
+        setDrafted((m) => {
+          const next = { ...m };
+          delete next[id];
+          return next;
+        });
+      } else if (d.status === "draft" || d.status === "sent") {
         const status = d.status;
-        setDrafted((m) => ({ ...m, [id]: status }));
+        setDrafted((m) => ({ ...m, [id]: { status, draft: d.draft ?? m[id]?.draft } }));
       }
     }
     window.addEventListener("sw-email-drafted", onDrafted);
@@ -139,7 +150,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
         {awaiting.length > 0 ? (
           <ul>
             {awaiting.map((t) => (
-              <EmailRow key={t.id} t={t} now={now} status={drafted[t.id]} />
+              <EmailRow key={t.id} t={t} now={now} rowState={drafted[t.id]} />
             ))}
           </ul>
         ) : (
@@ -161,7 +172,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
         {view.threads.length > 0 ? (
           <ul>
             {view.threads.map((t) => (
-              <EmailRow key={t.id} t={t} now={now} status={drafted[t.id]} />
+              <EmailRow key={t.id} t={t} now={now} rowState={drafted[t.id]} />
             ))}
           </ul>
         ) : (
@@ -176,9 +187,32 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
   );
 }
 
-function EmailRow({ t, now, status }: { t: EmailThread; now: number; status?: "draft" | "sent" }) {
+function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?: RowState }) {
   const [drafting, setDrafting] = useState(false);
+  const status = rowState?.status;
   const dotClass = status === "sent" ? "bg-emerald-500" : status === "draft" ? "bg-amber-500" : "bg-peri-deep";
+
+  // Reopen the existing saved draft alongside the original email for review/send.
+  async function reviewDraft() {
+    if (drafting) return;
+    const draft = rowState?.draft;
+    if (!draft) {
+      void draftReply();
+      return;
+    }
+    setDrafting(true);
+    let showcase: { from: string; subject: string; body: string } | undefined;
+    try {
+      const r = await getEmailBody(t.id);
+      if (r.ok && r.body) {
+        showcase = { from: t.senderName, subject: t.subject, body: cleanForReading(r.body) };
+      }
+    } catch {
+      /* draft still opens without the showcase */
+    }
+    window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { showcase, presetEmail: draft } }));
+    setDrafting(false);
+  }
 
   // Read the real email body, then hand the whole thing to Alfred so he replies
   // in context (and in SwissWiper's voice) — not from the subject line alone.
@@ -229,14 +263,25 @@ function EmailRow({ t, now, status }: { t: EmailThread; now: number; status?: "d
         <span className="text-xs text-hint" title={fullTime(t.dateISO)}>
           {relativeTime(t.dateISO, now)}
         </span>
-        <button
-          type="button"
-          onClick={draftReply}
-          disabled={drafting}
-          className="text-xs font-medium text-peri-deep hover:underline disabled:opacity-50"
-        >
-          {drafting ? "Reading email…" : "Draft reply with Alfred"}
-        </button>
+        {status === "draft" ? (
+          <button
+            type="button"
+            onClick={reviewDraft}
+            disabled={drafting}
+            className="text-xs font-medium text-amber-700 hover:underline disabled:opacity-50"
+          >
+            {drafting ? "Opening…" : "Review draft / send"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={draftReply}
+            disabled={drafting}
+            className="text-xs font-medium text-peri-deep hover:underline disabled:opacity-50"
+          >
+            {drafting ? "Reading email…" : "Draft reply with Alfred"}
+          </button>
+        )}
         <a
           href={t.gmailUrl}
           target="_blank"

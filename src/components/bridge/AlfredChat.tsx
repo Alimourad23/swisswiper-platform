@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { speak, stopSpeaking, unlockAudio } from "@/lib/bridge/voice";
 import { createTask, setStatus } from "@/lib/tasks/actions";
-import { createEmailDraft, createReplyDraft, sendEmail } from "@/lib/google/gmail-actions";
+import { createEmailDraft, createReplyDraft, deleteDraft, sendEmail } from "@/lib/google/gmail-actions";
 import { createEvent, rescheduleEvent, cancelEvent } from "@/lib/google/calendar-actions";
 import { dateInputToIso } from "@/lib/tasks/format";
 import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
@@ -91,6 +91,8 @@ export default function AlfredChat({
   seed = "",
   seedKey = 0,
   readAloud = "",
+  presetEmail = null,
+  presetKey = 0,
 }: {
   onSpeakingChange: (speaking: boolean) => void;
   onListeningChange: (listening: boolean) => void;
@@ -108,6 +110,10 @@ export default function AlfredChat({
   /** Text Alfred reads aloud BEFORE acting on the seed (e.g. the original email
    *  in the full-screen reply composer). */
   readAloud?: string;
+  /** An already-saved draft to open directly in the review panel (the "Review
+   *  draft / send" flow), bypassing the brain. */
+  presetEmail?: EmailDraftState | null;
+  presetKey?: number;
 }) {
   const router = useRouter();
 
@@ -396,9 +402,20 @@ export default function AlfredChat({
       const r = d.messageId
         ? await createReplyDraft({ messageId: d.messageId, to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body })
         : await createEmailDraft({ to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.body });
+      // Re-saving an existing draft: remove the old one so we don't pile up duplicates.
+      if (r.ok && d.draftId && r.draftId && r.draftId !== d.draftId) {
+        try {
+          await deleteDraft(d.draftId);
+        } catch {
+          /* best-effort */
+        }
+      }
       if (r.ok && d.messageId) {
+        const saved = { ...d, draftId: r.draftId };
         window.dispatchEvent(
-          new CustomEvent("sw-email-drafted", { detail: { messageId: d.messageId, status: "draft" } }),
+          new CustomEvent("sw-email-drafted", {
+            detail: { messageId: d.messageId, status: "draft", draft: saved },
+          }),
         );
       }
       finishWithResult(r.ok ? "I've drafted it in your Gmail." : `I couldn't draft it: ${r.error}`);
@@ -477,6 +494,28 @@ export default function AlfredChat({
     clearPendings();
     finishWithResult("Very good — I'll leave it.");
   }, [stopRecForAction, clearPendings, finishWithResult]);
+
+  // Discard a saved draft: delete it from Gmail (gmail.compose covers this) and
+  // clear the row's status. The original email is untouched and stays unread.
+  const discardEmail = useCallback(async () => {
+    const d = emailRefState.current;
+    if (!d) return;
+    stopRecForAction();
+    emailRefState.current = null;
+    setEmailDraft(null);
+    setBusy(true);
+    try {
+      if (d.draftId) await deleteDraft(d.draftId);
+    } catch {
+      /* best-effort */
+    }
+    if (d.messageId) {
+      window.dispatchEvent(
+        new CustomEvent("sw-email-drafted", { detail: { messageId: d.messageId, status: "cleared" } }),
+      );
+    }
+    finishWithResult("Discarded — I've left the email unread.");
+  }, [stopRecForAction, finishWithResult]);
 
   const triggerRevise = useCallback(() => {
     if (!(taskRef.current || emailRefState.current || eventRefState.current)) return;
@@ -691,6 +730,21 @@ export default function AlfredChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedKey]);
 
+  // Open an already-saved draft directly in the review panel ("Review draft /
+  // send"), with its Send / Redraft / Save / Discard / Cancel options.
+  useEffect(() => {
+    if (presetKey > 0 && active && presetEmail) {
+      onEngage?.();
+      clearPendings();
+      emailRefState.current = presetEmail;
+      setEmailDraft(presetEmail);
+      speakLine(
+        `Here is your draft to ${presetEmail.fromName || shortRecipient(presetEmail.to)}. Send it, redraft, add a recipient, or discard?`,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetKey]);
+
   // The mic doubles as a "done — go" button. Tapping while listening ends the
   // capture and acts immediately: confirm a pending review/action panel, else
   // submit whatever was just said to Alfred. (Saying nothing just stops.)
@@ -720,6 +774,9 @@ export default function AlfredChat({
     { label: "Send", kind: "send", onClick: () => void submitEmailSend() },
     { label: "Redraft", kind: "ghost", onClick: triggerRevise },
     { label: "Save draft", kind: "primary", onClick: () => void submitEmailDraft() },
+    ...(emailDraft?.draftId
+      ? [{ label: "Discard", kind: "ghost", onClick: () => void discardEmail() } as PanelOption]
+      : []),
     { label: "Cancel", kind: "ghost", onClick: cancelPending },
   ];
   const eventOptions: PanelOption[] = [

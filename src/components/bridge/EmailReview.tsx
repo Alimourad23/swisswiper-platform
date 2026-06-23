@@ -13,6 +13,7 @@ export type EmailDraftState = {
   body: string;
   messageId?: string; // set for replies (threading handled server-side)
   fromName?: string; // sender display (for spoken phrasing)
+  draftId?: string; // the Gmail draft id, once saved (for re-save / discard)
 };
 
 const inputCls =

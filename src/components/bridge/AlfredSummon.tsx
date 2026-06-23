@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import AlfredOverlay, { type Showcase } from "@/components/bridge/AlfredOverlay";
+import type { EmailDraftState } from "@/components/bridge/EmailReview";
 import { unlockAudio } from "@/lib/bridge/voice";
 
 /* Makes Alfred reachable from every dashboard page. Lives in the dashboard
@@ -44,6 +45,8 @@ export default function AlfredSummon() {
   const [seed, setSeed] = useState("");
   const [seedKey, setSeedKey] = useState(0);
   const [showcase, setShowcase] = useState<Showcase | null>(null);
+  const [presetEmail, setPresetEmail] = useState<EmailDraftState | null>(null);
+  const [presetKey, setPresetKey] = useState(0);
 
   useEffect(() => {
     try {
@@ -57,6 +60,7 @@ export default function AlfredSummon() {
   const close = useCallback(() => {
     setOpen(false);
     setShowcase(null); // next plain summon returns to the compact card
+    setPresetEmail(null);
   }, []);
 
   // The Overview hero orb (and anything else) summons Alfred via this event,
@@ -69,14 +73,21 @@ export default function AlfredSummon() {
       // straight to Alfred; a plain summon just opens and listens. A `showcase`
       // turns it into the full-screen reply composer.
       const detail = (e as CustomEvent).detail as
-        | { seed?: string; showcase?: Showcase }
+        | { seed?: string; showcase?: Showcase; presetEmail?: EmailDraftState }
         | undefined;
-      if (detail?.seed && detail.seed.trim()) {
+      if (detail?.presetEmail) {
+        // Reopen an existing saved draft for review/send.
+        setShowcase(detail.showcase ?? null);
+        setPresetEmail(detail.presetEmail);
+        setPresetKey((k) => k + 1);
+      } else if (detail?.seed && detail.seed.trim()) {
         setSeed(detail.seed.trim());
         setShowcase(detail.showcase ?? null);
+        setPresetEmail(null);
         setSeedKey((k) => k + 1);
       } else {
         setShowcase(null);
+        setPresetEmail(null);
         setAutoListenKey((k) => k + 1);
       }
     }
@@ -218,7 +229,16 @@ export default function AlfredSummon() {
         </div>
       )}
 
-      <AlfredOverlay open={open} onClose={close} autoListenKey={autoListenKey} seed={seed} seedKey={seedKey} showcase={showcase} />
+      <AlfredOverlay
+        open={open}
+        onClose={close}
+        autoListenKey={autoListenKey}
+        seed={seed}
+        seedKey={seedKey}
+        showcase={showcase}
+        presetEmail={presetEmail}
+        presetKey={presetKey}
+      />
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AlfredStar from "@/components/bridge/AlfredStar";
 import AlfredChat from "@/components/bridge/AlfredChat";
+import type { EmailDraftState } from "@/components/bridge/EmailReview";
 
 /* Summon-anywhere Alfred. Two modes:
    • COMPACT — a small card floating over the current page (the page stays
@@ -22,6 +23,8 @@ export default function AlfredOverlay({
   seed = "",
   seedKey = 0,
   showcase = null,
+  presetEmail = null,
+  presetKey = 0,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +32,8 @@ export default function AlfredOverlay({
   seed?: string;
   seedKey?: number;
   showcase?: Showcase | null;
+  presetEmail?: EmailDraftState | null;
+  presetKey?: number;
 }) {
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
@@ -44,10 +49,12 @@ export default function AlfredOverlay({
   }, [open, onClose]);
 
   // What Alfred reads aloud before drafting (the original email), kept to a
-  // sensible length for the voice.
-  const readAloud = showcase
-    ? `Here is the email from ${showcase.from}. The subject is: ${showcase.subject}. ${showcase.body.slice(0, 1400)}`
-    : "";
+  // sensible length for the voice. When reopening an existing draft we don't
+  // re-read the email — Alfred goes straight to the draft.
+  const readAloud =
+    showcase && !presetEmail
+      ? `Here is the email from ${showcase.from}. The subject is: ${showcase.subject}. ${showcase.body.slice(0, 1400)}`
+      : "";
 
   const chat = (
     <AlfredChat
@@ -56,6 +63,8 @@ export default function AlfredOverlay({
       seed={seed}
       seedKey={seedKey}
       readAloud={readAloud}
+      presetEmail={presetEmail}
+      presetKey={presetKey}
       onDismiss={onClose}
       onSpeakingChange={setSpeaking}
       onListeningChange={setListening}
