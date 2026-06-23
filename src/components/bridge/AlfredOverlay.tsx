@@ -78,36 +78,66 @@ export default function AlfredOverlay({
 
   /* ── COMPOSER: full-screen reply takeover ───────────────────────────────── */
   if (showcase) {
+    const initial = (showcase.from.trim()[0] || "•").toUpperCase();
+    const status = speaking
+      ? "Reading the message…"
+      : panelOpen
+        ? "Your reply — review, refine, send"
+        : "Drafting your reply…";
     return (
-      <div aria-hidden={!open} className={open ? "fixed inset-0 z-[100] flex" : "hidden"}>
-        <div className="absolute inset-0 bg-[#06070F]/95 backdrop-blur-xl" />
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-6xl flex-col gap-4 p-4 sm:p-6 lg:flex-row">
-          {/* The email being replied to */}
-          <div className="flex min-h-0 flex-1 flex-col rounded-[24px] border border-[#8e9ae0]/20 bg-white/[0.03] p-5 text-left">
-            <p className="text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/60">Replying to</p>
-            <p className="mt-2 truncate text-sm font-medium text-[#eef1f8]">{showcase.from}</p>
-            <p className="truncate text-sm text-[#8e9ae0]/80">{showcase.subject}</p>
-            <div className="mt-3 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words pr-1 text-sm leading-relaxed text-[#cdd3ea]/90">
+      <div aria-hidden={!open} className={open ? "fixed inset-0 z-[100] overflow-hidden" : "hidden"}>
+        {/* Deep-space backdrop with a soft periwinkle aurora */}
+        <div className="absolute inset-0 bg-[#05060D]" />
+        <div className="pointer-events-none absolute inset-x-0 -top-1/4 h-[70%] bg-[radial-gradient(55%_70%_at_50%_0%,rgba(142,154,224,0.20),transparent_70%)]" />
+        <div className="pointer-events-none absolute -bottom-1/3 right-0 h-[60%] w-[60%] bg-[radial-gradient(50%_50%_at_70%_70%,rgba(92,102,166,0.14),transparent_70%)]" />
+
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Dismiss Alfred"
+          className="absolute right-5 top-5 z-20 grid h-9 w-9 place-items-center rounded-full border border-[#8e9ae0]/20 bg-white/[0.04] text-[#8e9ae0]/80 backdrop-blur transition-colors hover:bg-white/[0.1] hover:text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-7xl flex-col gap-5 p-5 sm:p-8 lg:flex-row">
+          {/* LEFT — Alfred's reply (appears automatically) */}
+          <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[#8e9ae0]/20 bg-[#0a0c18]/70 shadow-[0_30px_90px_rgba(2,3,12,0.55)] backdrop-blur-2xl">
+            <div className="flex items-center gap-4 border-b border-[#8e9ae0]/10 px-6 py-4">
+              <div className="relative grid h-14 w-14 shrink-0 place-items-center">
+                <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(142,154,224,0.35),transparent_70%)] blur-md" />
+                {open && <AlfredStar speaking={speaking} listening={listening} className="relative h-14 w-14" />}
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/70">Alfred</p>
+                <p className="truncate text-sm text-[#cdd3ea]/85">{status}</p>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-5 pb-6">
+              {chat}
+            </div>
+          </section>
+
+          {/* RIGHT — the email being replied to */}
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[#8e9ae0]/15 bg-white/[0.025] backdrop-blur-2xl">
+            <div className="border-b border-[#8e9ae0]/10 px-6 py-4">
+              <p className="text-[10px] font-medium uppercase tracking-[0.34em] text-[#8e9ae0]/55">Replying to</p>
+              <div className="mt-3 flex items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8e9ae0]/45 to-[#5C66A6]/45 text-sm font-semibold text-white">
+                  {initial}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[#eef1f8]">{showcase.from}</p>
+                  <p className="truncate text-xs text-[#8e9ae0]/70">{showcase.subject}</p>
+                </div>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-6 py-5 text-[13px] leading-relaxed text-[#cdd3ea]/85">
               {showcase.body}
             </div>
-          </div>
-
-          {/* Alfred — reads, drafts, reads, and shows the editable draft */}
-          <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto rounded-[24px] border border-[#8e9ae0]/25 bg-[#06070F]/80 p-5 text-center">
-            {closeBtn}
-            {open && (
-              <AlfredStar
-                speaking={speaking}
-                listening={listening}
-                className={
-                  panelOpen
-                    ? "aspect-square h-[clamp(60px,9vh,96px)] w-auto"
-                    : "aspect-square h-[clamp(96px,14vh,150px)] w-auto"
-                }
-              />
-            )}
-            {chat}
-          </div>
+          </section>
         </div>
       </div>
     );

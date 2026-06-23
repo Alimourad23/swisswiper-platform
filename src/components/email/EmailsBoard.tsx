@@ -45,26 +45,33 @@ function fullTime(iso: string): string {
   return isNaN(d.getTime()) ? "" : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
-/* Strip quoted reply history so the showcase + read-aloud is just the new
-   message, not the whole forwarded chain. */
+/* Strip quoted reply history so the showcase + read-aloud is JUST the new
+   message, not the whole forwarded chain. Cuts at the EARLIEST quoted-history
+   marker found. */
 function cleanForReading(body: string): string {
   let b = body.replace(/\r\n/g, "\n");
-  const cutPatterns = [
-    /\nOn .+wrote:/,
-    /\n_{5,}/,
-    /\n-{2,}\s*Original Message\s*-{2,}/i,
-    /\nFrom:\s.+\nSent:\s/i,
-    /\n\s*>/,
+  const markers = [
+    /\n\s*On .{0,120}wrote:/i, //         "On <date>, <name> wrote:"
+    /\n\s*-{2,}\s*Original Message/i, //  "----- Original Message -----"
+    /\n\s*From: .*\n\s*(Sent|Date): /i, // forwarded header block (Date or Sent)
+    /\n\s*From: .*<[^>]+@[^>]+>/i, //      "From: Name <email>" quoted header
+    /\n_{5,}/, //                         long underscore divider
   ];
-  for (const p of cutPatterns) {
-    const idx = b.search(p);
-    if (idx > 60) b = b.slice(0, idx);
+  let cut = b.length;
+  for (const m of markers) {
+    const idx = b.search(m);
+    if (idx > 40 && idx < cut) cut = idx;
   }
+  b = b.slice(0, cut);
+  // Drop any remaining quoted lines + inline image placeholders.
   b = b
     .split("\n")
     .filter((l) => !/^\s*>/.test(l))
-    .join("\n");
-  return b.replace(/\n{3,}/g, "\n\n").trim();
+    .join("\n")
+    .replace(/\[[^\]\n]+\.(png|jpe?g|gif|svg)\]/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return b;
 }
 
 export default function EmailsBoard({ view }: { view: InboxView }) {
