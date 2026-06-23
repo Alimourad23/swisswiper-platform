@@ -18,7 +18,7 @@ export default function CalendarPage() {
       <ModuleHeader
         icon={m.icon}
         title={m.name}
-        subtitle="Your agenda and meeting load, read-only — nothing is ever changed."
+        subtitle="Your agenda and meeting load — create, reschedule, or cancel through Alfred."
         right={
           <div className="flex items-center gap-2">
             <LivePill />

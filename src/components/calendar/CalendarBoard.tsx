@@ -20,6 +20,14 @@ import {
 
 type DayBucket = { key: string; label: string; meetings: CalEventRaw[]; reminders: CalEventRaw[] };
 
+/* Hand a request to Alfred (summon-anywhere overlay). A seed makes him act/ask
+   straight away; no seed just opens him listening. */
+function summonAlfred(seed?: string) {
+  window.dispatchEvent(
+    new CustomEvent("sw-alfred-summon", seed ? { detail: { seed } } : undefined),
+  );
+}
+
 export default function CalendarBoard({
   events,
   pendingInvites,
@@ -88,7 +96,18 @@ export default function CalendarBoard({
 
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-xs text-hint">Times shown in {tz}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-hint">Times shown in {tz}</p>
+        <button
+          type="button"
+          onClick={() =>
+            summonAlfred("Let's schedule a new meeting — please ask me the title, time, and who to invite.")
+          }
+          className="shrink-0 rounded-full bg-peri-soft px-3 py-1.5 text-xs font-medium text-peri-deep transition-colors hover:brightness-95"
+        >
+          + New meeting with Alfred
+        </button>
+      </div>
 
       <UpNext ev={model.upNext} now={now} />
 
@@ -140,7 +159,7 @@ function UpNext({ ev, now }: { ev: CalEventRaw | null; now: number }) {
         </p>
         {purpose && <p className="mt-0.5 truncate text-sm text-hint">{purpose}</p>}
       </div>
-      {ev.joinUrl && <JoinButton url={ev.joinUrl} />}
+      <EventActions ev={ev} />
     </div>
   );
 }
@@ -239,7 +258,7 @@ function MeetingRow({ ev }: { ev: CalEventRaw }) {
           {purpose && <p className="truncate text-sm text-muted">{purpose}</p>}
         </div>
       </div>
-      {ev.joinUrl && <JoinButton url={ev.joinUrl} />}
+      <EventActions ev={ev} />
     </div>
   );
 }
@@ -250,6 +269,30 @@ function ReminderRow({ ev }: { ev: CalEventRaw }) {
       <span className="w-20 shrink-0 text-sm tabular-nums text-hint">{timeLabel(ev)}</span>
       <span className="min-w-0 flex-1 truncate text-sm text-muted">{ev.title}</span>
       <ReminderTag />
+    </div>
+  );
+}
+
+function EventActions({ ev }: { ev: CalEventRaw }) {
+  return (
+    <div className="flex shrink-0 items-center gap-3">
+      {ev.joinUrl && <JoinButton url={ev.joinUrl} />}
+      <button
+        type="button"
+        onClick={() =>
+          summonAlfred(`I'd like to reschedule my meeting "${ev.title}". Please ask me the new time.`)
+        }
+        className="text-xs text-hint transition-colors hover:text-peri-deep hover:underline"
+      >
+        Reschedule
+      </button>
+      <button
+        type="button"
+        onClick={() => summonAlfred(`Cancel my meeting "${ev.title}".`)}
+        className="text-xs text-hint transition-colors hover:text-red-600 hover:underline"
+      >
+        Cancel
+      </button>
     </div>
   );
 }
