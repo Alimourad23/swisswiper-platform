@@ -49,14 +49,25 @@ export function todayKey(now: number): string {
   return dateKey(now);
 }
 
-export function weekKeys(now: number): string[] {
+export function weekKeys(now: number, offsetDays = 0): string[] {
   const base = new Date(now);
   base.setHours(12, 0, 0, 0);
+  base.setDate(base.getDate() + offsetDays);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
     return dateKey(d.getTime());
   });
+}
+
+/* "Jun 30 – Jul 6" style label for a run of day-keys. */
+export function rangeLabel(keys: string[]): string {
+  if (keys.length === 0) return "";
+  const fmt = (key: string) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString([], { month: "short", day: "numeric" });
+  };
+  return `${fmt(keys[0])} – ${fmt(keys[keys.length - 1])}`;
 }
 
 export function dayLabel(key: string, tKey: string): string {

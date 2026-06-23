@@ -11,7 +11,12 @@ import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types
 import ActionPanel, { type PanelOption } from "@/components/bridge/ActionPanel";
 import TaskReview, { type TaskDraft } from "@/components/bridge/TaskReview";
 import EmailReview, { type EmailDraftState } from "@/components/bridge/EmailReview";
-import EventReview, { type EventDraftState } from "@/components/bridge/EventReview";
+import EventReview, {
+  type EventDraftState,
+  type RecurrenceKey,
+  recurrenceRule,
+  recurrenceLabel,
+} from "@/components/bridge/EventReview";
 
 /* Push-to-talk → CONTINUOUS conversation with Alfred. Once you start, the mic
    keeps listening across turns (Alfred resumes after each reply) until you say
@@ -464,6 +469,7 @@ export default function AlfredChat({
           attendees: d.attendees.split(",").map((s) => s.trim()).filter(Boolean),
           description: d.description,
           timeZone: timeZone.current,
+          recurrence: recurrenceRule(d.recurrence),
         });
         finishWithResult(
           r.ok
@@ -1052,13 +1058,61 @@ function interpretSendEmail(input: Record<string, unknown>, dir: Directory): Int
   };
 }
 
+/* Keep a 10-minute breather between a new meeting and existing calendar blocks.
+   If the proposed slot would butt up against (or overlap) an existing event,
+   push the start to the earliest time that leaves ≥10 min after it, preserving
+   the duration. Local "YYYY-MM-DDTHH:mm" strings vs ISO instants both parse to
+   epoch ms, so comparisons are timezone-safe. */
+const BREATHER_MS = 10 * 60 * 1000;
+
+function msToLocalInput(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes(),
+  )}`;
+}
+
+function applyBreather(
+  startLocal: string,
+  endLocal: string,
+  events: { start: string; end: string }[],
+): { start: string; end: string; moved: boolean } {
+  let s = new Date(startLocal).getTime();
+  const dur = new Date(endLocal).getTime() - s;
+  if (!Number.isFinite(s) || !Number.isFinite(dur) || dur <= 0) {
+    return { start: startLocal, end: endLocal, moved: false };
+  }
+  let moved = false;
+  for (let i = 0; i < 12; i++) {
+    const conflict = events.find((e) => {
+      const es = Date.parse(e.start);
+      const ee = Date.parse(e.end);
+      if (!Number.isFinite(es) || !Number.isFinite(ee)) return false;
+      // The existing event intrudes on the new slot extended 10 min earlier.
+      return es < s + dur && ee > s - BREATHER_MS;
+    });
+    if (!conflict) break;
+    const next = Date.parse(conflict.end) + BREATHER_MS;
+    if (next <= s) break; // no forward progress — bail
+    s = next;
+    moved = true;
+  }
+  return moved ? { start: msToLocalInput(s), end: msToLocalInput(s + dur), moved: true } : { start: startLocal, end: endLocal, moved: false };
+}
+
 function interpretCreateEvent(input: Record<string, unknown>, dir: Directory): Interpretation {
   const title = String(input.title ?? "").trim() || "New event";
   // Always open the review panel; if the time didn't parse, default to the next
   // hour so the user can adjust it (better than refusing the action).
-  const start = toLocalInput(String(input.start ?? "")) || nextHourLocal();
+  const startReq = toLocalInput(String(input.start ?? "")) || nextHourLocal();
   const endRaw = input.end ? toLocalInput(String(input.end)) : "";
-  const end = endRaw || addMinutesLocal(start, 60);
+  const endReq = endRaw || addMinutesLocal(startReq, 60);
+
+  // Keep a 10-minute breather from existing meetings.
+  const br = applyBreather(startReq, endReq, dir.events);
+  const start = br.start;
+  const end = br.end;
 
   // Resolve each attendee to a real email. A bare name (e.g. "Etienne") is
   // matched against teammates first, then recent email senders — otherwise the
@@ -1084,9 +1138,28 @@ function interpretCreateEvent(input: Record<string, unknown>, dir: Directory): I
     ? ` I couldn't find an email for ${unresolved.join(" or ")} — add it in the panel if you'd like them invited.`
     : "";
 
+  const breatherNote = br.moved
+    ? ` I nudged it to ${whenLabel(start)} to keep a ten-minute breather from your other meetings.`
+    : "";
+
+  const recurrence = oneOf(
+    input.recurrence,
+    ["none", "daily", "weekly", "weekdays", "monthly"],
+    "none",
+  ) as RecurrenceKey;
+  const repeatNote = recurrence !== "none" ? ` Repeating ${recurrenceLabel(recurrence).toLowerCase()}.` : "";
+
   return {
-    event: { mode: "create", title, start, end, attendees: emails.join(", "), description: String(input.description ?? "") },
-    spoken: `I've drafted an event: ${title}, ${whenLabel(start)}.${note} Say create, revise, or cancel.`,
+    event: {
+      mode: "create",
+      title,
+      start,
+      end,
+      attendees: emails.join(", "),
+      description: String(input.description ?? ""),
+      recurrence,
+    },
+    spoken: `I've drafted an event: ${title}, ${whenLabel(start)}.${repeatNote}${breatherNote}${note} Say create, revise, or cancel.`,
   };
 }
 

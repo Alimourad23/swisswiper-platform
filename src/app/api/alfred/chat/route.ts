@@ -128,6 +128,12 @@ const TOOLS: Anthropic.Tool[] = [
         end: { type: "string", description: "End, ISO 8601 local. If omitted, default to one hour after start." },
         attendees: { type: "array", items: { type: "string" }, description: "Emails or teammate names." },
         description: { type: "string" },
+        recurrence: {
+          type: "string",
+          enum: ["none", "daily", "weekly", "weekdays", "monthly"],
+          description:
+            "How often it repeats. 'weekly' = same weekday as the start; 'weekdays' = Mon–Fri; 'monthly' = same date each month. Default 'none' (one-off). Infer from phrasing like 'every Monday' (weekly), 'daily standup', 'every weekday', 'monthly review'.",
+        },
       },
       required: ["title", "start"],
     },

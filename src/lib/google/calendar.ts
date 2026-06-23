@@ -66,7 +66,7 @@ export async function getCalendarData(
     orderBy: "startTime",
     maxResults: "250",
     timeMin: new Date(now - 24 * 3600 * 1000).toISOString(),
-    timeMax: new Date(now + 9 * 24 * 3600 * 1000).toISOString(),
+    timeMax: new Date(now + 35 * 24 * 3600 * 1000).toISOString(),
   });
 
   const data = await cget<{ items?: GEvent[] }>(

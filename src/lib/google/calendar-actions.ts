@@ -35,6 +35,8 @@ export async function createEvent(input: {
   timeZone: string;
   /** Attach a Google Meet video link to the event. Defaults to true. */
   addMeet?: boolean;
+  /** Optional RRULE(s) for a recurring event, e.g. ["RRULE:FREQ=WEEKLY"]. */
+  recurrence?: string[];
 }): Promise<Result> {
   const token = await getGoogleAccessToken();
   if (!token) return { ok: false, error: "Google isn't connected." };
@@ -50,6 +52,7 @@ export async function createEvent(input: {
     description: input.description?.trim() || undefined,
     start: { dateTime: start, timeZone: input.timeZone },
     end: { dateTime: end, timeZone: input.timeZone },
+    ...(input.recurrence && input.recurrence.length ? { recurrence: input.recurrence } : {}),
     attendees: (input.attendees ?? [])
       .map((e) => e.trim())
       .filter((e) => e.includes("@"))

@@ -9,6 +9,7 @@ import {
   eventDayKey,
   todayKey,
   weekKeys,
+  rangeLabel,
   dayLabel,
   timeLabel,
   countdownLabel,
@@ -31,6 +32,7 @@ function summonAlfred(seed?: string) {
 
 export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
   const [now, setNow] = useState<number | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week; navigates the agenda
 
   // Establish "now" only after mount (so day/time math uses the device timezone,
   // and the countdown ticks). Avoids any server/client hydration mismatch.
@@ -45,44 +47,48 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
   const model = useMemo(() => {
     if (now === null) return null;
     const tKey = todayKey(now);
-    const wKeys = weekKeys(now);
-    const wSet = new Set(wKeys);
 
-    const byDay = new Map<string, { meetings: CalEventRaw[]; reminders: CalEventRaw[] }>();
-    for (const e of events) {
-      const key = eventDayKey(e);
-      if (!wSet.has(key)) continue;
-      const bucket = byDay.get(key) ?? { meetings: [], reminders: [] };
-      (e.isMeeting ? bucket.meetings : bucket.reminders).push(e);
-      byDay.set(key, bucket);
-    }
+    const buildDays = (keys: string[]): DayBucket[] => {
+      const set = new Set(keys);
+      const byDay = new Map<string, { meetings: CalEventRaw[]; reminders: CalEventRaw[] }>();
+      for (const e of events) {
+        const key = eventDayKey(e);
+        if (!set.has(key)) continue;
+        const bucket = byDay.get(key) ?? { meetings: [], reminders: [] };
+        (e.isMeeting ? bucket.meetings : bucket.reminders).push(e);
+        byDay.set(key, bucket);
+      }
+      return keys.map((key) => {
+        const b = byDay.get(key) ?? { meetings: [], reminders: [] };
+        b.meetings.sort((a, c) => startMs(a) - startMs(c));
+        b.reminders.sort((a, c) => startMs(a) - startMs(c));
+        return { key, label: dayLabel(key, tKey), meetings: b.meetings, reminders: b.reminders };
+      });
+    };
 
-    const days: DayBucket[] = wKeys.map((key) => {
-      const b = byDay.get(key) ?? { meetings: [], reminders: [] };
-      b.meetings.sort((a, c) => startMs(a) - startMs(c));
-      b.reminders.sort((a, c) => startMs(a) - startMs(c));
-      return { key, label: dayLabel(key, tKey), meetings: b.meetings, reminders: b.reminders };
-    });
+    // Stats are always "this week" (offset 0); the agenda list navigates.
+    const days0 = buildDays(weekKeys(now, 0));
+    const agendaDays = buildDays(weekKeys(now, weekOffset * 7));
 
-    const todayMeetings = days[0]?.meetings ?? [];
+    const todayMeetings = days0[0]?.meetings ?? [];
     const upNext =
       [...events]
         .filter((e) => e.isMeeting && startMs(e) > now)
         .sort((a, b) => startMs(a) - startMs(b))[0] ?? null;
 
     return {
-      days,
+      agendaDays,
       todayMeetings,
       meetingsToday: todayMeetings.length,
-      remindersToday: days[0]?.reminders.length ?? 0,
-      meetingsThisWeek: days.reduce((n, d) => n + d.meetings.length, 0),
-      conflicts: days.reduce((n, d) => n + d.meetings.filter((m) => m.overlaps).length, 0),
+      remindersToday: days0[0]?.reminders.length ?? 0,
+      meetingsThisWeek: days0.reduce((n, d) => n + d.meetings.length, 0),
+      conflicts: days0.reduce((n, d) => n + d.meetings.filter((m) => m.overlaps).length, 0),
       upNext,
       load: todayLoad(todayMeetings, now),
-      tomorrow: days[1],
+      tomorrow: days0[1],
       pending: events.filter((e) => e.myStatus === "needsAction"),
     };
-  }, [events, now]);
+  }, [events, now, weekOffset]);
 
   if (!model || now === null) {
     return (
@@ -123,9 +129,29 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
 
       <div className="sw-card">
         <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
-          <h3 className="text-base font-medium">Next 7 days</h3>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-base font-medium">
+              {weekOffset === 0 ? "This week" : weekOffset === 1 ? "Next week" : rangeLabel(model.agendaDays.map((d) => d.key))}
+            </h3>
+            {weekOffset !== 0 && (
+              <span className="text-xs text-hint">{rangeLabel(model.agendaDays.map((d) => d.key))}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {weekOffset !== 0 && (
+              <button
+                type="button"
+                onClick={() => setWeekOffset(0)}
+                className="mr-1 text-xs font-medium text-peri-deep hover:underline"
+              >
+                Today
+              </button>
+            )}
+            <NavArrow dir="prev" disabled={weekOffset === 0} onClick={() => setWeekOffset((o) => Math.max(0, o - 1))} />
+            <NavArrow dir="next" disabled={weekOffset >= 4} onClick={() => setWeekOffset((o) => Math.min(4, o + 1))} />
+          </div>
         </div>
-        {model.days.map((d) => (
+        {model.agendaDays.map((d) => (
           <DayBlock key={d.key} day={d} />
         ))}
       </div>
@@ -339,6 +365,22 @@ function ReminderRow({ ev }: { ev: CalEventRaw }) {
       <span className="min-w-0 flex-1 truncate text-sm text-muted">{ev.title}</span>
       <ReminderTag />
     </div>
+  );
+}
+
+function NavArrow({ dir, disabled, onClick }: { dir: "prev" | "next"; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={dir === "prev" ? "Previous week" : "Next week"}
+      className="grid h-7 w-7 place-items-center rounded-full text-muted transition-colors hover:bg-bg hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {dir === "prev" ? <path d="M15 18l-6-6 6-6" /> : <path d="M9 18l6-6-6-6" />}
+      </svg>
+    </button>
   );
 }
 
