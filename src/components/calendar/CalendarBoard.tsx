@@ -366,10 +366,13 @@ function MeetingRow({ ev }: { ev: CalEventRaw }) {
 
 function ReminderRow({ ev }: { ev: CalEventRaw }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-20 shrink-0 text-sm tabular-nums text-hint">{timeLabel(ev)}</span>
-      <span className="min-w-0 flex-1 truncate text-sm text-muted">{ev.title}</span>
-      <ReminderTag />
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="w-20 shrink-0 text-sm tabular-nums text-hint">{timeLabel(ev)}</span>
+        <span className="min-w-0 truncate text-sm text-muted">{ev.title}</span>
+        <ReminderTag />
+      </div>
+      <EventActions ev={ev} />
     </div>
   );
 }
