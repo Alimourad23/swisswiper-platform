@@ -51,6 +51,19 @@ async function EmailsData() {
 
   if (view && !errored) return <EmailsBoard view={view} />;
 
+  // A fetch failure is NOT the same as being signed out — say so plainly.
+  if (errored) {
+    return (
+      <div className="sw-card px-6">
+        <ConnectState
+          icon={m.icon}
+          message="I couldn't reach Gmail just now. This is usually temporary — refresh in a moment. If it keeps happening, reconnect your Google account from the menu."
+          action={<GoogleAuthButton variant="inline" label="Reconnect Google" forceConsent />}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="sw-card px-6">
       <ConnectState

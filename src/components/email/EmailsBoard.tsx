@@ -65,15 +65,20 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
     <div className="flex flex-col gap-6">
       <p className="text-xs text-hint">Times shown in {tz}</p>
 
-      {/* Inbox load — one-line summary */}
+      {/* Inbox load — totals kept separate from recent-window triage so the
+          numbers never look contradictory (totals span the whole inbox; triage
+          covers only the most recent conversations). */}
       <div className="sw-card px-6 py-5">
         <span className="text-sm text-muted">Inbox load</span>
         <p className="mt-2 text-sm text-ink">
           <strong className="font-medium">{view.unread}</strong> unread{" · "}
+          <strong className="font-medium">{view.week}</strong> received this week
+        </p>
+        <p className="mt-1 text-xs text-hint">
+          In your {view.windowSize} most recent conversations:{" "}
           <strong className="font-medium text-peri-deep">{view.needAttention}</strong> need attention
           {" · "}
-          <strong className="font-medium">{view.safeToDelete}</strong> safe to delete{" · "}
-          <strong className="font-medium">{view.week}</strong> received this week
+          <strong className="font-medium">{view.safeToDelete}</strong> safe to delete
         </p>
       </div>
 
@@ -103,7 +108,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
       <div className="sw-card">
         <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
           <h3 className="text-base font-medium">Triaged inbox</h3>
-          <span className="text-xs text-hint">Most recent {view.threads.length}</span>
+          <span className="text-xs text-hint">Most recent {view.threads.length} conversations</span>
         </div>
         {view.threads.length > 0 ? (
           <ul>
@@ -132,6 +137,14 @@ function EmailRow({ t, now }: { t: EmailThread; now: number }) {
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-peri-deep" aria-label="unread" />
           )}
           <span className="truncate text-sm font-medium text-ink">{t.senderName}</span>
+          {t.msgCount > 1 && (
+            <span
+              title={`${t.msgCount} messages in this conversation`}
+              className="shrink-0 rounded-full bg-bg px-1.5 text-[11px] font-medium leading-tight text-hint"
+            >
+              {t.msgCount}
+            </span>
+          )}
           <Badge t={t} />
         </div>
         <p className="truncate text-sm text-muted">{t.subject}</p>

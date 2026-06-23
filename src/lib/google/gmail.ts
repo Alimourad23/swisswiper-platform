@@ -10,7 +10,8 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 // Recent inbox messages we classify + display. The need-attention / safe /
 // awaiting counts are derived from this same set, so list and counts agree.
-const INBOX_WINDOW = 18;
+// We scan a wider window, then collapse to one row per conversation.
+const INBOX_WINDOW = 40;
 
 async function gget<T>(token: string, path: string): Promise<T> {
   const res = await fetch(`${GMAIL}${path}`, {
@@ -65,14 +66,16 @@ export type EmailThread = {
   tag: TriageTag;
   awaitingReply: boolean; // unread + Primary + real person + addressed to me (best-effort)
   gmailUrl: string; // deep link to open the thread in Gmail
+  msgCount: number; // messages in this conversation within the scanned window
 };
 
 export type InboxView = {
-  unread: number;
-  week: number;
-  needAttention: number;
-  safeToDelete: number;
-  awaitingReply: number;
+  unread: number; // TOTAL unread across the whole inbox (label count)
+  week: number; // TOTAL received in the last 7 days (paginated count)
+  windowSize: number; // how many recent conversations the triage covers
+  needAttention: number; // within the scanned window
+  safeToDelete: number; // within the scanned window
+  awaitingReply: number; // within the scanned window
   threads: EmailThread[];
 };
 
@@ -94,11 +97,32 @@ export async function getInboxView(token: string): Promise<InboxView> {
   ]);
 
   const myEmail = (profile.emailAddress ?? "").toLowerCase();
-  const threads = messages.map((m) => toThread(m, myEmail));
+  const all = messages.map((m) => toThread(m, myEmail));
+
+  // Collapse to one row per conversation: keep the newest message as the
+  // representative, but mark the thread unread if ANY message in it is unread
+  // and count how many messages it holds.
+  const byThread = new Map<string, EmailThread>();
+  for (const t of all) {
+    const existing = byThread.get(t.threadId);
+    if (!existing) {
+      byThread.set(t.threadId, { ...t, msgCount: 1 });
+      continue;
+    }
+    const merged: EmailThread =
+      Date.parse(t.dateISO) > Date.parse(existing.dateISO) ? { ...t } : { ...existing };
+    merged.msgCount = existing.msgCount + 1;
+    merged.unread = existing.unread || t.unread;
+    byThread.set(t.threadId, merged);
+  }
+  const threads = [...byThread.values()].sort(
+    (a, b) => Date.parse(b.dateISO) - Date.parse(a.dateISO),
+  );
 
   return {
     unread: inbox.messagesUnread ?? 0,
     week,
+    windowSize: threads.length,
     needAttention: threads.filter((t) => t.tag === "priority").length,
     safeToDelete: threads.filter((t) => t.tag === "safe").length,
     awaitingReply: threads.filter((t) => t.awaitingReply).length,
@@ -151,6 +175,7 @@ function toThread(msg: GmailMessage, myEmail: string): EmailThread {
     tag,
     awaitingReply,
     gmailUrl: `https://mail.google.com/mail/u/0/#inbox/${msg.threadId}`,
+    msgCount: 1,
   };
 }
 
