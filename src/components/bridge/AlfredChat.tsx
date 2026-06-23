@@ -415,7 +415,13 @@ export default function AlfredChat({
           description: d.description,
           timeZone: timeZone.current,
         });
-        finishWithResult(r.ok ? `Done — “${d.title}” is on your calendar.` : `I couldn't create it: ${r.error}`);
+        finishWithResult(
+          r.ok
+            ? r.meetLink
+              ? `Done — “${d.title}” is on your calendar, with a Google Meet link attached.`
+              : `Done — “${d.title}” is on your calendar.`
+            : `I couldn't create it: ${r.error}`,
+        );
       }
     } catch {
       finishWithResult("I couldn't do that with your calendar, I'm afraid.");
