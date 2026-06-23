@@ -67,6 +67,7 @@ export type EmailThread = {
   awaitingReply: boolean; // unread + Primary + real person + addressed to me (best-effort)
   gmailUrl: string; // deep link to open the thread in Gmail
   msgCount: number; // messages in this conversation within the scanned window
+  draftId?: string; // an existing Gmail draft for this conversation, if any
 };
 
 export type InboxView = {
@@ -89,11 +90,12 @@ type GmailMessage = {
 };
 
 export async function getInboxView(token: string): Promise<InboxView> {
-  const [profile, inbox, week, messages] = await Promise.all([
+  const [profile, inbox, week, messages, draftMap] = await Promise.all([
     gget<{ emailAddress?: string }>(token, "/profile"),
     gget<{ messagesUnread?: number }>(token, "/labels/INBOX"),
     countMessages(token, "in:inbox newer_than:7d"),
     fetchMessages(token, INBOX_WINDOW),
+    fetchDraftThreadMap(token),
   ]);
 
   const myEmail = (profile.emailAddress ?? "").toLowerCase();
@@ -115,9 +117,9 @@ export async function getInboxView(token: string): Promise<InboxView> {
     merged.unread = existing.unread || t.unread;
     byThread.set(t.threadId, merged);
   }
-  const threads = [...byThread.values()].sort(
-    (a, b) => Date.parse(b.dateISO) - Date.parse(a.dateISO),
-  );
+  const threads = [...byThread.values()]
+    .sort((a, b) => Date.parse(b.dateISO) - Date.parse(a.dateISO))
+    .map((t) => (draftMap[t.threadId] ? { ...t, draftId: draftMap[t.threadId] } : t));
 
   return {
     unread: inbox.messagesUnread ?? 0,
@@ -128,6 +130,26 @@ export async function getInboxView(token: string): Promise<InboxView> {
     awaitingReply: threads.filter((t) => t.awaitingReply).length,
     threads,
   };
+}
+
+/* Map of threadId → draftId for the user's existing Gmail drafts, so a saved
+   reply shows a persistent "Draft ready" status (survives refresh). Best-effort:
+   on any error we just return an empty map (no badges). */
+async function fetchDraftThreadMap(token: string): Promise<Record<string, string>> {
+  try {
+    const data = await gget<{ drafts?: { id: string; message?: { threadId?: string } }[] }>(
+      token,
+      "/drafts?maxResults=100",
+    );
+    const map: Record<string, string> = {};
+    for (const d of data.drafts ?? []) {
+      const tid = d.message?.threadId;
+      if (tid && d.id) map[tid] = d.id;
+    }
+    return map;
+  } catch {
+    return {};
+  }
 }
 
 async function fetchMessages(token: string, max: number): Promise<GmailMessage[]> {

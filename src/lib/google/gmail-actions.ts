@@ -218,6 +218,41 @@ export async function createReplyDraft(input: {
   return { ok: true, draftId: data.id };
 }
 
+/* Read a saved draft's content (To/Cc/Bcc/Subject/Body) so the composer can
+   reopen it for review. */
+export async function getDraft(
+  draftId: string,
+): Promise<
+  | { ok: true; to: string; cc: string; bcc: string; subject: string; body: string }
+  | { ok: false; error: string }
+> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+
+  const res = await fetch(`${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=full`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return { ok: false, error: `Gmail returned ${res.status}.` };
+
+  const data = (await res.json()) as {
+    message?: { payload?: Part & { headers?: { name: string; value: string }[] } };
+  };
+  const payload = data.message?.payload;
+  const headers = payload?.headers ?? [];
+  const get = (n: string) => headers.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? "";
+
+  const acc: { mime: string; data: string }[] = [];
+  collectParts(payload, acc);
+  const plain = acc.find((a) => a.mime === "text/plain");
+  let body = "";
+  if (plain) body = decodePart(plain.data);
+  else if (acc[0]) body = decodePart(acc[0].data).replace(/<[^>]+>/g, " ");
+  body = body.replace(/\r\n/g, "\n").trim();
+
+  return { ok: true, to: get("To"), cc: get("Cc"), bcc: get("Bcc"), subject: get("Subject"), body };
+}
+
 /* Delete a Gmail draft (used by "Discard"). gmail.compose covers draft
    deletion, so no extra permission is needed. The original email is untouched
    and stays unread. */

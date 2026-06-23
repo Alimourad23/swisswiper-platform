@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EmailThread, InboxView } from "@/lib/google/gmail";
 import { PriorityPill, SafePill } from "@/components/Pill";
-import { getEmailBody } from "@/lib/google/gmail-actions";
+import { getDraft, getEmailBody, trashThread } from "@/lib/google/gmail-actions";
 import type { EmailDraftState } from "@/components/bridge/EmailReview";
 
-type RowState = { status: "draft" | "sent"; draft?: EmailDraftState };
+type RowState = { status: "draft" | "sent" | "cleared"; draft?: EmailDraftState };
 
 function deviceTimeZone(): string {
   try {
@@ -97,11 +97,8 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
       if (!d?.messageId) return;
       const id = d.messageId;
       if (d.status === "cleared") {
-        setDrafted((m) => {
-          const next = { ...m };
-          delete next[id];
-          return next;
-        });
+        // Sentinel so a discarded draft also overrides a load-detected one.
+        setDrafted((m) => ({ ...m, [id]: { status: "cleared" } }));
       } else if (d.status === "draft" || d.status === "sent") {
         const status = d.status;
         setDrafted((m) => ({ ...m, [id]: { status, draft: d.draft ?? m[id]?.draft } }));
@@ -179,8 +176,8 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
           <p className="px-6 py-10 text-center text-sm text-muted">Your inbox is empty.</p>
         )}
         <p className="border-t border-hairline px-6 py-3 text-xs text-hint">
-          “Safe to delete” is only a suggestion based on Gmail’s categories and sender signals.
-          Nothing is ever deleted or modified.
+          “Safe to delete” is a suggestion based on Gmail’s categories and sender signals.
+          “Move to Trash” is recoverable — nothing is ever permanently deleted.
         </p>
       </div>
     </div>
@@ -189,18 +186,60 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
 
 function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?: RowState }) {
   const [drafting, setDrafting] = useState(false);
-  const status = rowState?.status;
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
+
+  // Move the whole conversation to Gmail Trash (recoverable).
+  async function deleteRow() {
+    if (deleting) return;
+    setDeleting(true);
+    setDelErr(null);
+    const r = await trashThread(t.threadId);
+    setDeleting(false);
+    setConfirmDel(false);
+    if (r.ok) setDeleted(true);
+    else setDelErr(r.error);
+  }
+  // Status comes from this session's actions, else from an existing Gmail draft
+  // detected on load (so it survives a refresh). A "cleared" sentinel (discarded
+  // this session) overrides a load-detected draft.
+  const sess = rowState?.status;
+  const status: "draft" | "sent" | undefined =
+    sess === "cleared" ? undefined : (sess ?? (t.draftId ? "draft" : undefined));
   const dotClass = status === "sent" ? "bg-emerald-500" : status === "draft" ? "bg-amber-500" : "bg-peri-deep";
 
-  // Reopen the existing saved draft alongside the original email for review/send.
+  // Reopen the saved draft alongside the original email for review/send. Use the
+  // in-session draft if we have it; otherwise fetch the saved Gmail draft.
   async function reviewDraft() {
     if (drafting) return;
-    const draft = rowState?.draft;
-    if (!draft) {
+    setDrafting(true);
+    let preset = rowState?.draft;
+    if (!preset && t.draftId) {
+      try {
+        const dr = await getDraft(t.draftId);
+        if (dr.ok) {
+          preset = {
+            to: dr.to,
+            cc: dr.cc,
+            bcc: dr.bcc,
+            subject: dr.subject,
+            body: dr.body,
+            messageId: t.id,
+            fromName: t.senderName,
+            draftId: t.draftId,
+          };
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    if (!preset) {
       void draftReply();
+      setDrafting(false);
       return;
     }
-    setDrafting(true);
     let showcase: { from: string; subject: string; body: string } | undefined;
     try {
       const r = await getEmailBody(t.id);
@@ -210,7 +249,7 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
     } catch {
       /* draft still opens without the showcase */
     }
-    window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { showcase, presetEmail: draft } }));
+    window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { showcase, presetEmail: preset } }));
     setDrafting(false);
   }
 
@@ -236,6 +275,27 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
     }
     window.dispatchEvent(new CustomEvent("sw-alfred-summon", { detail: { seed, showcase } }));
     setDrafting(false);
+  }
+
+  if (deleted) {
+    return (
+      <li className="flex items-center justify-between gap-4 border-t border-hairline px-6 py-3 text-sm text-hint first:border-t-0">
+        <span className="truncate">
+          <span className="line-through">
+            {t.senderName} — {t.subject}
+          </span>{" "}
+          · Moved to Trash
+        </span>
+        <a
+          href="https://mail.google.com/mail/u/0/#trash"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-xs hover:underline"
+        >
+          Undo in Gmail ↗
+        </a>
+      </li>
+    );
   }
 
   return (
@@ -290,6 +350,32 @@ function EmailRow({ t, now, rowState }: { t: EmailThread; now: number; rowState?
         >
           Open in Gmail ↗
         </a>
+        {t.tag === "safe" &&
+          (confirmDel ? (
+            <span className="flex items-center gap-2 text-xs">
+              <span className="text-hint">Move to Trash?</span>
+              <button
+                type="button"
+                onClick={deleteRow}
+                disabled={deleting}
+                className="font-medium text-red-600 hover:underline disabled:opacity-50"
+              >
+                {deleting ? "…" : "Yes"}
+              </button>
+              <button type="button" onClick={() => setConfirmDel(false)} className="text-hint hover:underline">
+                No
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDel(true)}
+              className="text-xs text-hint transition-colors hover:text-red-600 hover:underline"
+            >
+              Move to Trash
+            </button>
+          ))}
+        {delErr && <span className="max-w-[14rem] text-right text-[11px] text-red-600">{delErr}</span>}
       </div>
     </li>
   );

@@ -18,7 +18,7 @@ export default function EmailsPage() {
       <ModuleHeader
         icon={m.icon}
         title={m.name}
-        subtitle="Your triaged inbox, read-only — nothing is ever deleted or changed."
+        subtitle="Your triaged inbox. Reading is read-only; you can move junk to Trash (recoverable)."
         right={
           <div className="flex items-center gap-2">
             <LivePill />

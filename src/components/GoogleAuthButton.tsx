@@ -5,12 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 
 /* Google scopes we request alongside basic profile/email.
    Read: gmail.readonly + calendar.readonly.
-   Write (for Alfred's actions): gmail.compose (draft/send) + calendar.events
-   (create/move/cancel). We can read everything and act within these. */
+   Write (for Alfred's actions): gmail.compose (draft/send), gmail.modify
+   (move mail to Trash — recoverable) + calendar.events (create/move/cancel). */
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/gmail.compose",
+  "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar.events",
 ].join(" ");
 
