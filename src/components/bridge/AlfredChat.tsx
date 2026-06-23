@@ -824,7 +824,7 @@ function interpret(act: ActionCall, dir: Directory): Interpretation {
     case "send_email":
       return interpretSendEmail(input, dir);
     case "create_event":
-      return interpretCreateEvent(input);
+      return interpretCreateEvent(input, dir);
     case "reschedule_event":
       return interpretReschedule(input, dir);
     case "cancel_event":
@@ -928,19 +928,41 @@ function interpretSendEmail(input: Record<string, unknown>, dir: Directory): Int
   };
 }
 
-function interpretCreateEvent(input: Record<string, unknown>): Interpretation {
+function interpretCreateEvent(input: Record<string, unknown>, dir: Directory): Interpretation {
   const title = String(input.title ?? "").trim() || "New event";
   // Always open the review panel; if the time didn't parse, default to the next
   // hour so the user can adjust it (better than refusing the action).
   const start = toLocalInput(String(input.start ?? "")) || nextHourLocal();
   const endRaw = input.end ? toLocalInput(String(input.end)) : "";
   const end = endRaw || addMinutesLocal(start, 60);
-  const attendees = Array.isArray(input.attendees)
+
+  // Resolve each attendee to a real email. A bare name (e.g. "Etienne") is
+  // matched against teammates first, then recent email senders — otherwise the
+  // create step (which keeps only strings containing "@") would silently drop
+  // it and no one gets invited.
+  const rawAttendees = Array.isArray(input.attendees)
     ? (input.attendees as unknown[]).map((a) => String(a ?? "").trim()).filter(Boolean)
     : [];
+  const emails: string[] = [];
+  const unresolved: string[] = [];
+  for (const a of rawAttendees) {
+    if (a.includes("@")) {
+      emails.push(a);
+      continue;
+    }
+    const fromProfile = resolveProfileEmail(a, dir.profiles);
+    const fromEmail = fromProfile || resolveEmail(a, dir.emails)?.fromEmail || "";
+    if (fromEmail && fromEmail.includes("@")) emails.push(fromEmail);
+    else unresolved.push(a);
+  }
+
+  const note = unresolved.length
+    ? ` I couldn't find an email for ${unresolved.join(" or ")} — add it in the panel if you'd like them invited.`
+    : "";
+
   return {
-    event: { mode: "create", title, start, end, attendees: attendees.join(", "), description: String(input.description ?? "") },
-    spoken: `I've drafted an event: ${title}, ${whenLabel(start)}. Say create, revise, or cancel.`,
+    event: { mode: "create", title, start, end, attendees: emails.join(", "), description: String(input.description ?? "") },
+    spoken: `I've drafted an event: ${title}, ${whenLabel(start)}.${note} Say create, revise, or cancel.`,
   };
 }
 

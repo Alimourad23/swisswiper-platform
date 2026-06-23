@@ -68,7 +68,8 @@ export async function createEvent(input: {
   };
 
   // conferenceDataVersion=1 is REQUIRED for Google to act on conferenceData.
-  const res = await fetch(`${CAL}?conferenceDataVersion=1`, {
+  // sendUpdates=all makes Google email the invitation to every attendee.
+  const res = await fetch(`${CAL}?conferenceDataVersion=1&sendUpdates=all`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -97,7 +98,7 @@ export async function rescheduleEvent(input: {
   const end = toDateTime(input.end);
   if (!start || !end) return { ok: false, error: "a valid new time is needed." };
 
-  const res = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}`, {
+  const res = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}?sendUpdates=all`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -117,7 +118,7 @@ export async function cancelEvent(input: { eventId: string }): Promise<Result> {
   const token = await getGoogleAccessToken();
   if (!token) return { ok: false, error: "Google isn't connected." };
 
-  const res = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}`, {
+  const res = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}?sendUpdates=all`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
