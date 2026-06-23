@@ -335,9 +335,17 @@ export default function AlfredChat({
         confirmRef.current = offer;
         setConfirm(offer);
       }
-      speakLine(line, resumeListening);
+      // In the summon / reply composer overlay, a finished action (send, save
+      // draft, create, confirm, cancel) closes the dialogue: speak the brief
+      // confirmation, then dismiss. An offer (e.g. "shall I open it?") keeps it
+      // open. The Bridge has no onDismiss, so it keeps its conversational flow.
+      if (onDismiss && !offer) {
+        speakLine(line, () => onDismiss());
+      } else {
+        speakLine(line, resumeListening);
+      }
     },
-    [addAssistant, speakLine, resumeListening],
+    [addAssistant, speakLine, resumeListening, onDismiss],
   );
 
   /* ── Submit handlers ──────────────────────────────────────────────────── */
