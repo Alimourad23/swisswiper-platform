@@ -516,7 +516,14 @@ export default function AlfredChat({
     const rec = new Ctor();
     rec.lang = "en-GB";
     rec.interimResults = true;
-    rec.continuous = true; // keep listening through natural pauses
+    // Single-utterance mode: the browser's native end-of-speech detection fires
+    // onend automatically when you stop talking (the same "done" signal a mic-tap
+    // forces), so a spoken request is submitted hands-free. Continuous listening
+    // across turns is kept by the resume loop, which starts a fresh recognizer
+    // after each turn. (continuous=true never ended on a pause, so speech-only
+    // never submitted — that was the bug.) The silence timer below stays as a
+    // backstop in case a browser is slow to fire its own onend.
+    rec.continuous = false;
     rec.maxAlternatives = 1;
     finalRef.current = "";
     interimRef.current = "";
