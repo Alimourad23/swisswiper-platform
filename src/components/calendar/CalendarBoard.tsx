@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CalEventRaw } from "@/lib/google/calendar";
+import { respondToEvent } from "@/lib/google/calendar-actions";
 import {
   deviceTimeZone,
   startMs,
@@ -28,13 +29,7 @@ function summonAlfred(seed?: string) {
   );
 }
 
-export default function CalendarBoard({
-  events,
-  pendingInvites,
-}: {
-  events: CalEventRaw[];
-  pendingInvites: number;
-}) {
+export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
   const [now, setNow] = useState<number | null>(null);
 
   // Establish "now" only after mount (so day/time math uses the device timezone,
@@ -85,6 +80,7 @@ export default function CalendarBoard({
       upNext,
       load: todayLoad(todayMeetings, now),
       tomorrow: days[1],
+      pending: events.filter((e) => e.myStatus === "needsAction"),
     };
   }, [events, now]);
 
@@ -117,10 +113,11 @@ export default function CalendarBoard({
         <LoadCard load={model.load} conflicts={model.conflicts} />
       </section>
 
-      {(pendingInvites > 0 || model.tomorrow) && (
+      {model.pending.length > 0 && <PendingInvites items={model.pending} now={now} />}
+
+      {model.tomorrow && (
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {pendingInvites > 0 && <PendingCard count={pendingInvites} />}
-          {model.tomorrow && <TomorrowCard day={model.tomorrow} />}
+          <TomorrowCard day={model.tomorrow} />
         </section>
       )}
 
@@ -185,13 +182,85 @@ function LoadCard({ load, conflicts }: { load: DayLoad; conflicts: number }) {
   );
 }
 
-function PendingCard({ count }: { count: number }) {
+function PendingInvites({ items, now }: { items: CalEventRaw[]; now: number }) {
+  const [done, setDone] = useState<Record<string, "accepted" | "declined" | "tentative">>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const tKey = todayKey(now);
+
+  async function respond(ev: CalEventRaw, response: "accepted" | "declined" | "tentative") {
+    if (busy) return;
+    setBusy(ev.id);
+    const r = await respondToEvent({ eventId: ev.id, response });
+    setBusy(null);
+    if (r.ok) setDone((d) => ({ ...d, [ev.id]: response }));
+  }
+
   return (
-    <div className="sw-soon px-6 py-5">
-      <p className="text-sm font-medium text-peri-deep">
-        {count} invitation{count > 1 ? "s" : ""} awaiting your reply
-      </p>
-      <p className="mt-1 text-sm text-muted">Review and respond in Google Calendar.</p>
+    <div className="sw-card">
+      <div className="border-b border-hairline px-6 py-4">
+        <h3 className="text-base font-medium">Invitations awaiting your reply</h3>
+      </div>
+      <ul>
+        {items.map((ev) => {
+          const status = done[ev.id];
+          const who = ev.attendeesOthers.slice(0, 2).join(", ");
+          return (
+            <li
+              key={ev.id}
+              className="flex items-center justify-between gap-3 border-t border-hairline px-6 py-3 first:border-t-0"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink">{ev.title}</p>
+                <p className="truncate text-sm text-muted">
+                  {dayLabel(eventDayKey(ev), tKey)} · {timeLabel(ev)}
+                  {who ? ` · ${who}` : ""}
+                </p>
+              </div>
+              {status ? (
+                <span
+                  className={[
+                    "shrink-0 text-xs font-medium",
+                    status === "accepted"
+                      ? "text-emerald-600"
+                      : status === "declined"
+                        ? "text-red-600"
+                        : "text-hint",
+                  ].join(" ")}
+                >
+                  {status === "accepted" ? "Accepted" : status === "declined" ? "Declined" : "Maybe"}
+                </span>
+              ) : (
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => respond(ev, "accepted")}
+                    disabled={busy === ev.id}
+                    className="rounded-full bg-peri-soft px-2.5 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => respond(ev, "tentative")}
+                    disabled={busy === ev.id}
+                    className="text-xs text-hint transition-colors hover:text-ink hover:underline disabled:opacity-50"
+                  >
+                    Maybe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => respond(ev, "declined")}
+                    disabled={busy === ev.id}
+                    className="text-xs text-hint transition-colors hover:text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

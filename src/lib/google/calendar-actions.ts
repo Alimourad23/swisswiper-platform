@@ -114,6 +114,42 @@ export async function rescheduleEvent(input: {
   return { ok: true };
 }
 
+/* Respond to an invitation — set your own attendee status (accept / decline /
+   tentative) and notify the organiser. Requires calendar.events (already
+   granted). */
+export async function respondToEvent(input: {
+  eventId: string;
+  response: "accepted" | "declined" | "tentative";
+}): Promise<Result> {
+  const token = await getGoogleAccessToken();
+  if (!token) return { ok: false, error: "Google isn't connected." };
+
+  // Fetch the event to get its attendee list, then flip our own status.
+  const getRes = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!getRes.ok) return { ok: false, error: `Calendar returned ${getRes.status}.` };
+  const ev = (await getRes.json()) as {
+    attendees?: { self?: boolean; email?: string; responseStatus?: string }[];
+  };
+  const attendees = (ev.attendees ?? []).map((a) =>
+    a.self ? { ...a, responseStatus: input.response } : a,
+  );
+
+  const res = await fetch(`${CAL}/${encodeURIComponent(input.eventId)}?sendUpdates=all`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ attendees }),
+  });
+  if (!res.ok) {
+    // eslint-disable-next-line no-console
+    console.error("Calendar respond failed:", res.status, await res.text().catch(() => ""));
+    return { ok: false, error: `Calendar returned ${res.status}.` };
+  }
+  return { ok: true };
+}
+
 export async function cancelEvent(input: { eventId: string }): Promise<Result> {
   const token = await getGoogleAccessToken();
   if (!token) return { ok: false, error: "Google isn't connected." };

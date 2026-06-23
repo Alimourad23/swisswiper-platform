@@ -49,7 +49,7 @@ async function CalendarData() {
     }
   }
 
-  if (data && !errored) return <CalendarBoard events={data.events} pendingInvites={data.pendingInvites} />;
+  if (data && !errored) return <CalendarBoard events={data.events} />;
 
   return (
     <div className="sw-card px-6">
