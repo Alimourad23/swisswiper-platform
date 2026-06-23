@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
    - Google access tokens expire (~1 hour), so we exchange the refresh token for
      a fresh access token server-side, then cache it in memory until it expires. */
 
-type CachedToken = { token: string; expiresAt: number };
+type CachedToken = { token: string; expiresAt: number; refreshToken: string };
 const tokenCache = new Map<string, CachedToken>();
 
 export async function getGoogleAccessToken(): Promise<string | null> {
@@ -19,12 +19,10 @@ export async function getGoogleAccessToken(): Promise<string | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Reuse a cached token while it's still valid (60s safety margin).
-  const cached = tokenCache.get(user.id);
-  if (cached && cached.expiresAt > Date.now() + 60_000) {
-    return cached.token;
-  }
-
+  // Read the CURRENT refresh token first. Google ties a refresh token to the
+  // scopes granted when it was issued, so after a reconnect (which stores a new
+  // refresh token with new scopes) we must mint a fresh access token — never
+  // reuse one cached from the old token, or new scopes (e.g. Trash) 403.
   const { data: row } = await supabase
     .from("google_tokens")
     .select("refresh_token")
@@ -33,6 +31,13 @@ export async function getGoogleAccessToken(): Promise<string | null> {
 
   const refreshToken = (row as { refresh_token?: string } | null)?.refresh_token;
   if (!refreshToken) return null;
+
+  // Reuse the cached token only if it was minted from the SAME refresh token and
+  // is still valid (60s safety margin).
+  const cached = tokenCache.get(user.id);
+  if (cached && cached.refreshToken === refreshToken && cached.expiresAt > Date.now() + 60_000) {
+    return cached.token;
+  }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -65,6 +70,7 @@ export async function getGoogleAccessToken(): Promise<string | null> {
   tokenCache.set(user.id, {
     token: json.access_token,
     expiresAt: Date.now() + expiresIn * 1000,
+    refreshToken,
   });
   return json.access_token;
 }
