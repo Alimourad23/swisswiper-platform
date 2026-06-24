@@ -20,6 +20,32 @@ function fmtDate(d: string): string {
   return new Date(y, m - 1, dd).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 }
 
+const CHANNEL_URL: Record<string, string> = {
+  linkedin: "https://www.linkedin.com/feed/",
+  instagram: "https://www.instagram.com/",
+  tiktok: "https://www.tiktok.com/upload",
+  youtube: "https://studio.youtube.com/",
+  website: "",
+};
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function todayStr(): string {
+  return ymd(new Date());
+}
+function weekRange(): { start: string; end: string } {
+  const d = new Date();
+  const dow = (d.getDay() + 6) % 7; // Monday = 0
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - dow);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return { start: ymd(mon), end: ymd(sun) };
+}
+
 const inputCls =
   "rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none";
 
@@ -32,6 +58,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const [busy, setBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftingId, setDraftingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function add() {
     const t = title.trim();
@@ -106,17 +133,36 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
     setDraftingId(null);
   }
 
+  function copy(id: string, text: string) {
+    navigator.clipboard?.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
+  }
+
   const shown = filter === "all" ? posts : posts.filter((p) => p.channel === filter);
   const scheduled = shown
     .filter((p) => p.scheduled_for)
     .sort((a, b) => (a.scheduled_for as string).localeCompare(b.scheduled_for as string));
   const backlog = shown.filter((p) => !p.scheduled_for);
 
+  // Publishing queue + weekly cadence.
+  const today = todayStr();
+  const wk = weekRange();
+  const due = shown.filter((p) => p.scheduled_for && p.scheduled_for <= today && p.status !== "published");
+  const weekPosts = posts.filter((p) => p.scheduled_for && p.scheduled_for >= wk.start && p.scheduled_for <= wk.end);
+  const toPostWeek = weekPosts.filter((p) => p.status !== "published").length;
+  const publishedWeek = weekPosts.filter((p) => p.status === "published").length;
+
   return (
     <div className="sw-card">
       <div className="flex items-center justify-between gap-3 border-b border-hairline px-6 py-4">
-        <h3 className="text-base font-medium">Content schedule</h3>
-        <span className="text-xs text-hint">{posts.length} planned</span>
+        <div>
+          <h3 className="text-base font-medium">Content schedule</h3>
+          <p className="text-xs text-hint">
+            This week: {toPostWeek} to post · {publishedWeek} published
+          </p>
+        </div>
+        <span className="shrink-0 text-xs text-hint">{posts.length} planned</span>
       </div>
 
       {/* Quick add */}
@@ -168,6 +214,40 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
         </p>
       ) : (
         <>
+          {due.length > 0 && (
+            <div className="mt-4 border-t border-peri-soft/60 bg-peri-soft/20">
+              <p className="px-6 pb-1 pt-3 text-xs font-medium uppercase tracking-wider text-peri-deep">Ready to post</p>
+              <ul>
+                {due.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-2 px-6 py-2.5">
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{p.title}</span>
+                    <span className="shrink-0 text-xs text-hint">
+                      {channelName(p.channel)}
+                      {p.scheduled_for ? ` · ${fmtDate(p.scheduled_for)}` : ""}
+                    </span>
+                    {p.body && (
+                      <button type="button" onClick={() => copy(p.id, p.body)} className="shrink-0 text-xs font-medium text-peri-deep hover:underline">
+                        {copiedId === p.id ? "Copied" : "Copy"}
+                      </button>
+                    )}
+                    {CHANNEL_URL[p.channel] && (
+                      <a href={CHANNEL_URL[p.channel]} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs font-medium text-peri-deep hover:underline">
+                        Open {channelName(p.channel)} ↗
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setStatus(p.id, "published")}
+                      className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 transition-colors hover:brightness-95"
+                    >
+                      Mark published
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {scheduled.length > 0 && (
             <Section label="Scheduled">
               {scheduled.map((p) => (
