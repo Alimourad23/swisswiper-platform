@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import ModuleHeader from "@/components/ModuleHeader";
 import MarketingOverviewClient from "@/components/marketing/MarketingOverviewClient";
+import ContentSchedule from "@/components/marketing/ContentSchedule";
 import { getModule } from "@/lib/modules";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
+import { getContentPosts } from "@/lib/marketing/schedule-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,7 @@ export default function MarketingPage() {
       <ModuleHeader
         icon={m.icon}
         title={m.name}
-        subtitle="Channel performance. LinkedIn is live; other channels connect over time."
+        subtitle="Plan, schedule and measure your content. LinkedIn analytics are live."
         right={<span className="text-xs text-hint">1 of 5 channels connected</span>}
       />
       <Suspense fallback={<MetricsSkeleton />}>
@@ -24,8 +26,13 @@ export default function MarketingPage() {
 }
 
 async function MarketingData() {
-  const { metrics } = await getLinkedInMetrics();
-  return <MarketingOverviewClient metrics={metrics} />;
+  const [{ metrics }, posts] = await Promise.all([getLinkedInMetrics(), getContentPosts()]);
+  return (
+    <div className="flex flex-col gap-6">
+      <ContentSchedule initialPosts={posts} />
+      <MarketingOverviewClient metrics={metrics} />
+    </div>
+  );
 }
 
 function MetricsSkeleton() {
