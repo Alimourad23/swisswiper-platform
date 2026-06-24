@@ -30,6 +30,8 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const [date, setDate] = useState("");
   const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [draftingId, setDraftingId] = useState<string | null>(null);
 
   async function add() {
     const t = title.trim();
@@ -79,6 +81,30 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
     setPosts((p) => p.filter((x) => x.id !== id));
     void deletePost(id);
   };
+  const toggleExpand = (id: string) => setExpandedId((c) => (c === id ? null : id));
+  const bodyChange = (id: string, b: string) => patch(id, { body: b });
+  const bodySave = (id: string, b: string) => void updatePost(id, { body: b });
+  async function draftPost(post: ContentPost) {
+    if (draftingId) return;
+    setDraftingId(post.id);
+    setExpandedId(post.id);
+    try {
+      const res = await fetch("/api/marketing/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: post.title, channel: post.channel }),
+      });
+      const data = (await res.json()) as { text?: string };
+      if (data.text) {
+        bodyChange(post.id, data.text);
+        bodySave(post.id, data.text);
+        if (post.status === "idea") setStatus(post.id, "draft");
+      }
+    } catch {
+      /* draft is best-effort */
+    }
+    setDraftingId(null);
+  }
 
   const shown = filter === "all" ? posts : posts.filter((p) => p.channel === filter);
   const scheduled = shown
@@ -148,6 +174,12 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                 <Row
                   key={p.id}
                   post={p}
+                  expanded={expandedId === p.id}
+                  drafting={draftingId === p.id}
+                  onToggle={() => toggleExpand(p.id)}
+                  onDraft={() => draftPost(p)}
+                  onBodyChange={bodyChange}
+                  onBodySave={bodySave}
                   onStatus={setStatus}
                   onSched={setSched}
                   onChan={setChan}
@@ -164,6 +196,12 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                 <Row
                   key={p.id}
                   post={p}
+                  expanded={expandedId === p.id}
+                  drafting={draftingId === p.id}
+                  onToggle={() => toggleExpand(p.id)}
+                  onDraft={() => draftPost(p)}
+                  onBodyChange={bodyChange}
+                  onBodySave={bodySave}
                   onStatus={setStatus}
                   onSched={setSched}
                   onChan={setChan}
@@ -192,6 +230,12 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function Row({
   post,
+  expanded,
+  drafting,
+  onToggle,
+  onDraft,
+  onBodyChange,
+  onBodySave,
   onStatus,
   onSched,
   onChan,
@@ -200,6 +244,12 @@ function Row({
   onRemove,
 }: {
   post: ContentPost;
+  expanded: boolean;
+  drafting: boolean;
+  onToggle: () => void;
+  onDraft: () => void;
+  onBodyChange: (id: string, b: string) => void;
+  onBodySave: (id: string, b: string) => void;
   onStatus: (id: string, s: ContentStatus) => void;
   onSched: (id: string, d: string) => void;
   onChan: (id: string, c: string) => void;
@@ -208,52 +258,89 @@ function Row({
   onRemove: (id: string) => void;
 }) {
   return (
-    <li className="flex flex-wrap items-center gap-2 border-t border-hairline px-6 py-3 first:border-t-0">
-      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[post.status]}`}>
-        {CONTENT_STATUSES.find((s) => s.key === post.status)?.label}
-      </span>
-      <input
-        value={post.title}
-        onChange={(e) => onTitle(post.id, e.target.value)}
-        onBlur={(e) => onSaveTitle(post.id, e.target.value)}
-        className="min-w-[10rem] flex-1 bg-transparent text-sm text-ink focus:outline-none"
-      />
-      <select
-        value={post.channel}
-        onChange={(e) => onChan(post.id, e.target.value)}
-        className="shrink-0 rounded-full bg-bg px-2 py-1 text-xs text-muted focus:outline-none"
-      >
-        {channels.map((c) => (
-          <option key={c.key} value={c.key}>
-            {channelName(c.key)}
-          </option>
-        ))}
-      </select>
-      <input
-        type="date"
-        value={post.scheduled_for ?? ""}
-        onChange={(e) => onSched(post.id, e.target.value)}
-        className="shrink-0 rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
-        title={post.scheduled_for ? fmtDate(post.scheduled_for) : "Set a date"}
-      />
-      <select
-        value={post.status}
-        onChange={(e) => onStatus(post.id, e.target.value as ContentStatus)}
-        className="shrink-0 rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
-      >
-        {CONTENT_STATUSES.map((s) => (
-          <option key={s.key} value={s.key}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        onClick={() => onRemove(post.id)}
-        className="shrink-0 text-xs text-hint transition-colors hover:text-red-600 hover:underline"
-      >
-        Remove
-      </button>
+    <li className="flex flex-col border-t border-hairline px-6 py-3 first:border-t-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={expanded ? "Collapse" : "Expand"}
+          className="grid h-5 w-5 shrink-0 place-items-center rounded text-hint hover:text-ink"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={expanded ? "rotate-90" : ""}>
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[post.status]}`}>
+          {CONTENT_STATUSES.find((s) => s.key === post.status)?.label}
+        </span>
+        <input
+          value={post.title}
+          onChange={(e) => onTitle(post.id, e.target.value)}
+          onBlur={(e) => onSaveTitle(post.id, e.target.value)}
+          className="min-w-[10rem] flex-1 bg-transparent text-sm text-ink focus:outline-none"
+        />
+        {post.body && !expanded && <span className="shrink-0 text-[11px] text-emerald-600">drafted</span>}
+        <select
+          value={post.channel}
+          onChange={(e) => onChan(post.id, e.target.value)}
+          className="shrink-0 rounded-full bg-bg px-2 py-1 text-xs text-muted focus:outline-none"
+        >
+          {channels.map((c) => (
+            <option key={c.key} value={c.key}>
+              {channelName(c.key)}
+            </option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={post.scheduled_for ?? ""}
+          onChange={(e) => onSched(post.id, e.target.value)}
+          className="shrink-0 rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
+          title={post.scheduled_for ? fmtDate(post.scheduled_for) : "Set a date"}
+        />
+        <select
+          value={post.status}
+          onChange={(e) => onStatus(post.id, e.target.value as ContentStatus)}
+          className="shrink-0 rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
+        >
+          {CONTENT_STATUSES.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => onRemove(post.id)}
+          className="shrink-0 text-xs text-hint transition-colors hover:text-red-600 hover:underline"
+        >
+          Remove
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 flex flex-col gap-2 pl-7">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-wider text-hint">Post copy</span>
+            <button
+              type="button"
+              onClick={onDraft}
+              disabled={drafting}
+              className="rounded-full bg-peri-soft px-3 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
+            >
+              {drafting ? "Drafting…" : post.body ? "Redraft with Alfred" : "Draft with Alfred"}
+            </button>
+          </div>
+          <textarea
+            value={post.body}
+            onChange={(e) => onBodyChange(post.id, e.target.value)}
+            onBlur={(e) => onBodySave(post.id, e.target.value)}
+            rows={post.body ? 8 : 3}
+            placeholder="Write the post, or let Alfred draft it…"
+            className="w-full resize-y rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
+          />
+        </div>
+      )}
     </li>
   );
 }
