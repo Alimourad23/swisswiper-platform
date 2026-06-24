@@ -2,9 +2,11 @@ import { Suspense } from "react";
 import ModuleHeader from "@/components/ModuleHeader";
 import MarketingOverviewClient from "@/components/marketing/MarketingOverviewClient";
 import ContentSchedule from "@/components/marketing/ContentSchedule";
+import MarketingPlanCard from "@/components/marketing/MarketingPlan";
 import { getModule } from "@/lib/modules";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
+import { getPlan } from "@/lib/marketing/plan-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +28,14 @@ export default function MarketingPage() {
 }
 
 async function MarketingData() {
-  const [{ metrics }, posts] = await Promise.all([getLinkedInMetrics(), getContentPosts()]);
+  const [{ metrics }, posts, plan] = await Promise.all([
+    getLinkedInMetrics(),
+    getContentPosts(),
+    getPlan(),
+  ]);
   return (
     <div className="flex flex-col gap-6">
+      <MarketingPlanCard initial={plan} />
       <ContentSchedule initialPosts={posts} />
       <MarketingOverviewClient metrics={metrics} />
     </div>
