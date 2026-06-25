@@ -62,6 +62,13 @@ export default function ContentStudio({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [media, setMedia] = useState<ContentMedia[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [genPrompt, setGenPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [genModel, setGenModel] = useState("pro");
+  const [genAspect, setGenAspect] = useState("1:1");
+  const [genSize, setGenSize] = useState("2K");
+  const [genCount, setGenCount] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +103,37 @@ export default function ContentStudio({
   async function removeMedia(id: string) {
     setMedia((m) => m.filter((x) => x.id !== id));
     await deleteMedia(id);
+  }
+
+  async function generateImage() {
+    const prompt = genPrompt.trim();
+    if (!prompt || generating) return;
+    setGenerating(true);
+    setGenError("");
+    try {
+      const res = await fetch("/api/marketing/media/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: post.id,
+          prompt,
+          model: genModel,
+          aspectRatio: genAspect,
+          imageSize: genSize,
+          count: genCount,
+        }),
+      });
+      const data = (await res.json()) as { media?: ContentMedia[]; error?: string };
+      if (data.media && data.media.length) {
+        setMedia((m) => [...m, ...(data.media as ContentMedia[])]);
+        setGenPrompt("");
+      } else {
+        setGenError(data.error || "Generation failed.");
+      }
+    } catch {
+      setGenError("Generation failed.");
+    }
+    setGenerating(false);
   }
 
   // Close on Escape; lock background scroll while open.
@@ -291,6 +329,68 @@ export default function ContentStudio({
                   }}
                 />
               </div>
+
+              {/* Generate an image with Alfred (Nano Banana) */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
+                <label className="flex items-center gap-1">
+                  Model
+                  <select value={genModel} onChange={(e) => setGenModel(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                    <option value="pro">Nano Banana Pro</option>
+                    <option value="flash">Nano Banana 2 (faster)</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Ratio
+                  <select value={genAspect} onChange={(e) => setGenAspect(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                    <option value="1:1">1:1 Square</option>
+                    <option value="4:5">4:5 Portrait</option>
+                    <option value="9:16">9:16 Story / Reel</option>
+                    <option value="16:9">16:9 Landscape</option>
+                    <option value="3:4">3:4</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Quality
+                  <select value={genSize} onChange={(e) => setGenSize(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                    <option value="1K">1K</option>
+                    <option value="2K">2K</option>
+                    <option value="4K">4K</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Images
+                  <select value={genCount} onChange={(e) => setGenCount(Number(e.target.value))} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                    {[1, 2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={genPrompt}
+                  onChange={(e) => setGenPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void generateImage();
+                    }
+                  }}
+                  placeholder="Describe an image for Alfred to generate…"
+                  className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void generateImage()}
+                  disabled={generating || !genPrompt.trim()}
+                  className="shrink-0 rounded-[var(--radius-control)] bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793] disabled:opacity-50"
+                >
+                  {generating ? "Generating…" : "Generate"}
+                </button>
+              </div>
+              {genError && <p className="text-xs text-red-600">{genError}</p>}
               {media.length === 0 ? (
                 <div className="rounded-[var(--radius-control)] border border-dashed border-hairline px-4 py-4 text-center">
                   <p className="text-xs text-hint">No media yet. Upload images or video for this post — Alfred image generation is coming next.</p>
