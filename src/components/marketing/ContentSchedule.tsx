@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
+import { getMedia } from "@/lib/marketing/media-actions";
+import type { ContentMedia } from "@/lib/marketing/media";
 import { createPost, updatePost, deletePost } from "@/lib/marketing/schedule-actions";
 import { syncPostCalendar, clearPostCalendar } from "@/lib/marketing/calendar-sync";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
@@ -60,7 +62,6 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [draftingId, setDraftingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [studioId, setStudioId] = useState<string | null>(null);
   const [view, setView] = useState<"calendar" | "list">("calendar");
@@ -158,28 +159,6 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
     void updatePost(id, { body: b });
     if (isDated(id)) void syncCal(id, { body: b });
   };
-  async function draftPost(post: ContentPost) {
-    if (draftingId) return;
-    setDraftingId(post.id);
-    setExpandedId(post.id);
-    try {
-      const res = await fetch("/api/marketing/draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: post.title, channel: post.channel }),
-      });
-      const data = (await res.json()) as { text?: string };
-      if (data.text) {
-        bodyChange(post.id, data.text);
-        bodySave(post.id, data.text);
-        if (post.status === "idea") setStatus(post.id, "draft");
-      }
-    } catch {
-      /* draft is best-effort */
-    }
-    setDraftingId(null);
-  }
-
   function copy(id: string, text: string) {
     navigator.clipboard?.writeText(text);
     setCopiedId(id);
@@ -331,12 +310,8 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                   key={p.id}
                   post={p}
                   expanded={expandedId === p.id}
-                  drafting={draftingId === p.id}
                   onToggle={() => toggleExpand(p.id)}
-                  onDraft={() => draftPost(p)}
                   onStudio={() => setStudioId(p.id)}
-                  onBodyChange={bodyChange}
-                  onBodySave={bodySave}
                   onStatus={setStatus}
                   onSched={setSched}
                   onChan={setChan}
@@ -354,12 +329,8 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                   key={p.id}
                   post={p}
                   expanded={expandedId === p.id}
-                  drafting={draftingId === p.id}
                   onToggle={() => toggleExpand(p.id)}
-                  onDraft={() => draftPost(p)}
                   onStudio={() => setStudioId(p.id)}
-                  onBodyChange={bodyChange}
-                  onBodySave={bodySave}
                   onStatus={setStatus}
                   onSched={setSched}
                   onChan={setChan}
@@ -411,12 +382,8 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 function Row({
   post,
   expanded,
-  drafting,
   onToggle,
-  onDraft,
   onStudio,
-  onBodyChange,
-  onBodySave,
   onStatus,
   onSched,
   onChan,
@@ -426,12 +393,8 @@ function Row({
 }: {
   post: ContentPost;
   expanded: boolean;
-  drafting: boolean;
   onToggle: () => void;
-  onDraft: () => void;
   onStudio: () => void;
-  onBodyChange: (id: string, b: string) => void;
-  onBodySave: (id: string, b: string) => void;
   onStatus: (id: string, s: ContentStatus) => void;
   onSched: (id: string, d: string) => void;
   onChan: (id: string, c: string) => void;
@@ -439,6 +402,19 @@ function Row({
   onSaveTitle: (id: string, t: string) => void;
   onRemove: (id: string) => void;
 }) {
+  const [previewMedia, setPreviewMedia] = useState<ContentMedia[]>([]);
+  // Load the post's media (for the at-a-glance preview) only when the row opens.
+  useEffect(() => {
+    if (!expanded) return;
+    let alive = true;
+    void getMedia(post.id).then((m) => {
+      if (alive) setPreviewMedia(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [expanded, post.id]);
+
   return (
     <li className="flex flex-col border-t border-hairline px-6 py-3 first:border-t-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -513,26 +489,41 @@ function Row({
       </div>
 
       {expanded && (
-        <div className="mt-3 flex flex-col gap-2 pl-7">
-          <div className="flex items-center justify-between">
+        <div className="mt-3 flex flex-col gap-3 pl-7">
+          {/* Summary of the copy (read-only preview — draft in the Studio) */}
+          <div>
             <span className="text-xs font-medium uppercase tracking-wider text-hint">Post copy</span>
-            <button
-              type="button"
-              onClick={onDraft}
-              disabled={drafting}
-              className="rounded-full bg-peri-soft px-3 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
-            >
-              {drafting ? "Drafting…" : post.body ? "Redraft with Alfred" : "Draft with Alfred"}
-            </button>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted">
+              {post.body ? (
+                post.body.length > 280 ? `${post.body.slice(0, 280)}…` : post.body
+              ) : (
+                <span className="text-hint">No copy yet — open the Studio to write it with Alfred.</span>
+              )}
+            </p>
           </div>
-          <textarea
-            value={post.body}
-            onChange={(e) => onBodyChange(post.id, e.target.value)}
-            onBlur={(e) => onBodySave(post.id, e.target.value)}
-            rows={post.body ? 8 : 3}
-            placeholder="Write the post, or let Alfred draft it…"
-            className="w-full resize-y rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
-          />
+
+          {/* Media preview — first image / video */}
+          {previewMedia.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {previewMedia.slice(0, 4).map((m) =>
+                m.kind === "video" ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video key={m.id} src={m.url} className="h-20 w-20 rounded-[var(--radius-control)] border border-hairline object-cover" />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={m.id} src={m.url} alt="" className="h-20 w-20 rounded-[var(--radius-control)] border border-hairline object-cover" />
+                ),
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onStudio}
+            className="self-start rounded-[var(--radius-control)] bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793]"
+          >
+            Open in Studio →
+          </button>
         </div>
       )}
     </li>
