@@ -5,6 +5,7 @@ import { getModule } from "@/lib/modules";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getMonthPlan } from "@/lib/marketing/monthly-actions";
 import { horizonMonths } from "@/lib/marketing/monthly";
+import { getIsFounder } from "@/lib/auth/role";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function MarketingPipelinePage() {
   const m = getModule("marketing")!;
   const months = horizonMonths(6); // current + next 5
   const key = months[0]; // default: the current month (plan the rest of it)
-  const [posts, monthPlan] = await Promise.all([getContentPosts(), getMonthPlan(key)]);
+  const [posts, monthPlan, isFounder] = await Promise.all([getContentPosts(), getMonthPlan(key), getIsFounder()]);
 
   // Planned posts per channel, per month (for the gap counter across the horizon).
   const countsByMonth: Record<string, Record<string, number>> = {};
@@ -32,7 +33,7 @@ export default async function MarketingPipelinePage() {
         subtitle="Every post from idea to published — plan, queue and open the Studio to draft."
       />
       <PlannerTabs plan={monthPlan} monthKey={key} months={months} countsByMonth={countsByMonth} />
-      <ContentSchedule initialPosts={posts} view="list" />
+      <ContentSchedule initialPosts={posts} view="list" isFounder={isFounder} />
     </div>
   );
 }

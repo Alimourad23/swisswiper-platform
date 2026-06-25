@@ -57,9 +57,11 @@ const inputCls =
 export default function ContentSchedule({
   initialPosts,
   view,
+  isFounder = false,
 }: {
   initialPosts: ContentPost[];
   view: "calendar" | "list";
+  isFounder?: boolean;
 }) {
   const [posts, setPosts] = useState<ContentPost[]>(initialPosts);
   const [title, setTitle] = useState("");
@@ -351,6 +353,7 @@ export default function ContentSchedule({
               onBodyChange={bodyChange}
               onBodySave={bodySave}
               onDelete={remove}
+              isFounder={isFounder}
             />
           );
         })()}

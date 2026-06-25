@@ -43,6 +43,7 @@ export default function ContentStudio({
   onBodyChange,
   onBodySave,
   onDelete,
+  isFounder = false,
 }: {
   post: ContentPost;
   onClose: () => void;
@@ -54,6 +55,7 @@ export default function ContentStudio({
   onBodyChange: (id: string, b: string) => void;
   onBodySave: (id: string, b: string) => void;
   onDelete: (id: string) => void;
+  isFounder?: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -76,8 +78,17 @@ export default function ContentStudio({
   const [genSize, setGenSize] = useState("2K");
   const [genCount, setGenCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<"choose" | "upload" | "create">("choose");
+  const [genKind, setGenKind] = useState<"image" | "video">("image");
   const [genSource, setGenSource] = useState<"text" | "image">("text");
   const [genSourceId, setGenSourceId] = useState<string | null>(null);
+  // Video (Veo)
+  const [vidModel, setVidModel] = useState("quality");
+  const [vidAspect, setVidAspect] = useState("16:9");
+  const [vidRes, setVidRes] = useState("1080p");
+  const [vidSeconds, setVidSeconds] = useState(8);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [videoStatus, setVideoStatus] = useState("");
+  const videoPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLTextAreaElement>(null);
@@ -142,6 +153,72 @@ export default function ContentStudio({
   async function removeMedia(id: string) {
     setMedia((m) => m.filter((x) => x.id !== id));
     await deleteMedia(id);
+  }
+
+  // Stop any video polling when the studio closes/unmounts.
+  useEffect(() => {
+    return () => {
+      if (videoPollRef.current) clearTimeout(videoPollRef.current);
+    };
+  }, []);
+
+  async function generateVideo() {
+    const prompt = genPrompt.trim();
+    if (!prompt || videoBusy) return;
+    setVideoBusy(true);
+    setGenError("");
+    setVideoStatus("Starting…");
+    try {
+      const res = await fetch("/api/marketing/media/video/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: post.id,
+          prompt,
+          model: vidModel,
+          aspectRatio: vidAspect,
+          resolution: vidRes,
+          seconds: vidSeconds,
+        }),
+      });
+      const data = (await res.json()) as { jobId?: string; error?: string };
+      if (!data.jobId) {
+        setGenError(data.error || "Couldn't start the video.");
+        setVideoBusy(false);
+        setVideoStatus("");
+        return;
+      }
+      const started = Date.now();
+      const poll = async () => {
+        try {
+          const r = await fetch(`/api/marketing/media/video/status?jobId=${data.jobId}`);
+          const d = (await r.json()) as { status?: string; media?: ContentMedia; error?: string };
+          if (d.status === "done" && d.media) {
+            setMedia((m) => [...m, d.media as ContentMedia]);
+            setVideoBusy(false);
+            setVideoStatus("");
+            setGenPrompt("");
+            return;
+          }
+          if (d.status === "error") {
+            setGenError(d.error || "Video generation failed.");
+            setVideoBusy(false);
+            setVideoStatus("");
+            return;
+          }
+          const secs = Math.round((Date.now() - started) / 1000);
+          setVideoStatus(`Generating… ${secs}s (this can take 1–3 minutes)`);
+          videoPollRef.current = setTimeout(poll, 10000);
+        } catch {
+          videoPollRef.current = setTimeout(poll, 10000);
+        }
+      };
+      videoPollRef.current = setTimeout(poll, 8000);
+    } catch {
+      setGenError("Couldn't start the video.");
+      setVideoBusy(false);
+      setVideoStatus("");
+    }
   }
 
   async function generateImage() {
@@ -410,9 +487,29 @@ export default function ContentStudio({
                 </div>
               )}
 
-              {/* Create with Alfred (Nano Banana) */}
+              {/* Create with Alfred (Nano Banana / Veo) */}
               {mediaMode === "create" && (
                 <div className="flex flex-col gap-2">
+                  {/* image vs video */}
+                  {isFounder && (
+                    <div className="flex w-fit rounded-full bg-bg p-0.5 text-xs">
+                      {(["image", "video"] as const).map((k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setGenKind(k)}
+                          className={`rounded-full px-3 py-1 font-medium capitalize transition-colors ${
+                            genKind === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+                          }`}
+                        >
+                          {k}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {genKind === "image" && (
+                  <>
                   {/* text-to-image vs image-to-image */}
                   <div className="flex w-fit rounded-full bg-bg p-0.5 text-xs">
                     {(["text", "image"] as const).map((s) => (
@@ -519,6 +616,68 @@ export default function ContentStudio({
                     {genPrompt.length.toLocaleString()} characters · {MODEL_INFO[genModel].name} accepts up to ~
                     {MODEL_INFO[genModel].tokens.toLocaleString()} tokens — keep it focused for the best result.
                   </p>
+                  </>
+                  )}
+
+                  {genKind === "video" && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
+                        <label className="flex items-center gap-1">
+                          Model
+                          <select value={vidModel} onChange={(e) => setVidModel(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                            <option value="quality">Veo 3.1</option>
+                            <option value="fast">Veo 3.1 Fast</option>
+                          </select>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          Ratio
+                          <select value={vidAspect} onChange={(e) => setVidAspect(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                            <option value="16:9">16:9 Landscape</option>
+                            <option value="9:16">9:16 Story / Reel</option>
+                          </select>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          Quality
+                          <select value={vidRes} onChange={(e) => setVidRes(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                            <option value="4k">4K</option>
+                          </select>
+                        </label>
+                        <label className="flex items-center gap-1">
+                          Length
+                          <select value={vidSeconds} onChange={(e) => setVidSeconds(Number(e.target.value))} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                            {[4, 6, 8].map((n) => (
+                              <option key={n} value={n}>
+                                {n}s
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <textarea
+                          value={genPrompt}
+                          onChange={(e) => setGenPrompt(e.target.value)}
+                          rows={2}
+                          placeholder="Describe the video — scene, motion, mood…"
+                          className="min-w-0 flex-1 resize-y rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void generateVideo()}
+                          disabled={videoBusy || !genPrompt.trim()}
+                          className="shrink-0 rounded-[var(--radius-control)] bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793] disabled:opacity-50"
+                        >
+                          {videoBusy ? "Generating…" : "Generate video"}
+                        </button>
+                      </div>
+                      <p className="text-xs text-hint">
+                        {videoStatus || `~$${(vidSeconds * 0.4).toFixed(2)} estimated · ${vidSeconds}s clip · video takes 1–3 minutes`}
+                      </p>
+                    </>
+                  )}
+
                   {genError && <p className="text-xs text-red-600">{genError}</p>}
                 </div>
               )}
