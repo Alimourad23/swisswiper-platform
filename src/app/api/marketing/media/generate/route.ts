@@ -30,18 +30,23 @@ async function callGemini(
   apiKey: string,
   prompt: string,
   cfg?: { aspectRatio: string; imageSize: string },
+  sourceImage?: { data: string; mime: string },
 ): Promise<GenResult> {
   const generationConfig: Record<string, unknown> = { responseModalities: ["TEXT", "IMAGE"] };
   // aspectRatio / imageSize are only honoured by the Gemini 3 image models.
   if (cfg && model.startsWith("gemini-3")) {
     generationConfig.responseFormat = { image: { aspectRatio: cfg.aspectRatio, imageSize: cfg.imageSize } };
   }
+  // For image-to-image (editing), pass the source image before the instruction.
+  const reqParts: unknown[] = [];
+  if (sourceImage) reqParts.push({ inline_data: { mime_type: sourceImage.mime, data: sourceImage.data } });
+  reqParts.push({ text: prompt });
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`,
     {
       method: "POST",
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
+      body: JSON.stringify({ contents: [{ parts: reqParts }], generationConfig }),
     },
   ).catch(() => null);
   if (!res) return { error: "Couldn't reach Google." };
@@ -95,7 +100,7 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  let body: { postId?: string; prompt?: string; model?: string; aspectRatio?: string; imageSize?: string; count?: number };
+  let body: { postId?: string; prompt?: string; model?: string; aspectRatio?: string; imageSize?: string; count?: number; sourceUrl?: string };
   try {
     body = await req.json();
   } catch {
@@ -110,16 +115,37 @@ export async function POST(req: Request) {
   const imageSize = SIZES.has(body.imageSize ?? "") ? (body.imageSize as string) : "2K";
   const count = Math.min(4, Math.max(1, Math.round(body.count ?? 1)));
 
+  // Image-to-image: fetch the source image (one of our own stored media) and pass it in.
+  let sourceImage: { data: string; mime: string } | undefined;
+  const sourceUrl = (body.sourceUrl ?? "").trim();
+  if (sourceUrl) {
+    try {
+      const r = await fetch(sourceUrl);
+      if (r.ok) {
+        const mime = r.headers.get("content-type") || "image/png";
+        const buf = Buffer.from(await r.arrayBuffer());
+        sourceImage = { data: buf.toString("base64"), mime };
+      }
+    } catch {
+      /* fall back to text-to-image if the source can't be fetched */
+    }
+  }
+  // The size config can't be combined with an input image, so drop it for editing.
+  const cfg = sourceImage ? undefined : { aspectRatio, imageSize };
+  // Text-to-image gets the full brand style; image editing uses the raw instruction
+  // (a heavy style preamble would fight the source image).
+  const promptText = sourceImage ? userPrompt : STYLE + userPrompt;
+
   const created: unknown[] = [];
   let lastError = "";
   let lastStatus: number | undefined;
   for (let i = 0; i < count; i++) {
     // Try the chosen model with the size config; fall back to the original model.
-    let image = await callGemini(chosen, apiKey, STYLE + userPrompt, { aspectRatio, imageSize });
+    let image = await callGemini(chosen, apiKey, promptText, cfg, sourceImage);
     if ("error" in image) {
       lastError = image.error;
       lastStatus = image.status;
-      image = await callGemini(FALLBACK_MODEL, apiKey, STYLE + userPrompt);
+      image = await callGemini(FALLBACK_MODEL, apiKey, promptText, undefined, sourceImage);
     }
     if ("error" in image) {
       lastError = image.error;

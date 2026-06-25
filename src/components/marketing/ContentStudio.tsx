@@ -75,8 +75,14 @@ export default function ContentStudio({
   const [genAspect, setGenAspect] = useState("1:1");
   const [genSize, setGenSize] = useState("2K");
   const [genCount, setGenCount] = useState(1);
+  const [mediaMode, setMediaMode] = useState<"choose" | "upload" | "create">("choose");
+  const [genSource, setGenSource] = useState<"text" | "image">("text");
+  const [genSourceId, setGenSourceId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const chatRef = useRef<HTMLTextAreaElement>(null);
+
+  const images = media.filter((m) => m.kind === "image");
 
   // Load attached media when the studio opens.
   useEffect(() => {
@@ -114,8 +120,13 @@ export default function ContentStudio({
   async function generateImage() {
     const prompt = genPrompt.trim();
     if (!prompt || generating) return;
+    if (genSource === "image" && !genSourceId) {
+      setGenError("Pick an image to edit first.");
+      return;
+    }
     setGenerating(true);
     setGenError("");
+    const sourceUrl = genSource === "image" ? images.find((m) => m.id === genSourceId)?.url : undefined;
     try {
       const res = await fetch("/api/marketing/media/generate", {
         method: "POST",
@@ -127,6 +138,7 @@ export default function ContentStudio({
           aspectRatio: genAspect,
           imageSize: genSize,
           count: genCount,
+          sourceUrl,
         }),
       });
       const data = (await res.json()) as { media?: ContentMedia[]; error?: string };
@@ -164,6 +176,7 @@ export default function ContentStudio({
     const next = [...messages, { role: "user" as const, content: text }];
     setMessages(next);
     setInput("");
+    if (chatRef.current) chatRef.current.style.height = "auto";
     setThinking(true);
     try {
       const res = await fetch("/api/marketing/studio", {
@@ -312,96 +325,179 @@ export default function ContentStudio({
             </div>
 
             {/* Media */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium uppercase tracking-wider text-hint">Media</span>
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  className="rounded-full bg-peri-soft px-3 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
-                >
-                  {uploading ? "Uploading…" : "Upload image / video"}
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length) void uploadFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
+                {mediaMode !== "choose" && (
+                  <button type="button" onClick={() => setMediaMode("choose")} className="text-xs text-muted transition-colors hover:text-ink">
+                    ← Back
+                  </button>
+                )}
               </div>
 
-              {/* Generate an image with Alfred (Nano Banana) */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
-                <label className="flex items-center gap-1">
-                  Model
-                  <select value={genModel} onChange={(e) => setGenModel(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
-                    <option value="pro">Nano Banana Pro</option>
-                    <option value="flash">Nano Banana 2 (faster)</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-1">
-                  Ratio
-                  <select value={genAspect} onChange={(e) => setGenAspect(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
-                    <option value="1:1">1:1 Square</option>
-                    <option value="4:5">4:5 Portrait</option>
-                    <option value="9:16">9:16 Story / Reel</option>
-                    <option value="16:9">16:9 Landscape</option>
-                    <option value="3:4">3:4</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-1">
-                  Quality
-                  <select value={genSize} onChange={(e) => setGenSize(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
-                    <option value="1K">1K</option>
-                    <option value="2K">2K</option>
-                    <option value="4K">4K</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-1">
-                  Images
-                  <select value={genCount} onChange={(e) => setGenCount(Number(e.target.value))} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
-                    {[1, 2, 3, 4].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  value={genPrompt}
-                  onChange={(e) => setGenPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void generateImage();
-                    }
-                  }}
-                  placeholder="Describe an image for Alfred to generate…"
-                  className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => void generateImage()}
-                  disabled={generating || !genPrompt.trim()}
-                  className="shrink-0 rounded-[var(--radius-control)] bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793] disabled:opacity-50"
-                >
-                  {generating ? "Generating…" : "Generate"}
-                </button>
-              </div>
-              {genError && <p className="text-xs text-red-600">{genError}</p>}
-              {media.length === 0 ? (
-                <div className="rounded-[var(--radius-control)] border border-dashed border-hairline px-4 py-4 text-center">
-                  <p className="text-xs text-hint">No media yet. Upload images or video for this post — Alfred image generation is coming next.</p>
+              {/* Step 1 — choose a direction */}
+              {mediaMode === "choose" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMediaMode("upload")}
+                    className="flex flex-col items-start gap-1 rounded-[var(--radius-control)] border border-hairline bg-surface px-4 py-3 text-left transition-colors hover:border-peri-deep"
+                  >
+                    <span className="text-sm font-medium text-ink">⬆ Upload</span>
+                    <span className="text-xs text-hint">Add your own image or video</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaMode("create")}
+                    className="flex flex-col items-start gap-1 rounded-[var(--radius-control)] border border-hairline bg-surface px-4 py-3 text-left transition-colors hover:border-peri-deep"
+                  >
+                    <span className="text-sm font-medium text-ink">✨ Create with Alfred</span>
+                    <span className="text-xs text-hint">Generate an image with Nano Banana</span>
+                  </button>
                 </div>
-              ) : (
+              )}
+
+              {/* Upload */}
+              {mediaMode === "upload" && (
+                <div className="rounded-[var(--radius-control)] border border-dashed border-hairline px-4 py-5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                    className="rounded-full bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793] disabled:opacity-50"
+                  >
+                    {uploading ? "Uploading…" : "Choose image / video"}
+                  </button>
+                  <p className="mt-2 text-xs text-hint">Images and video, up to 50 MB. You can pick several at once.</p>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length) void uploadFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Create with Alfred (Nano Banana) */}
+              {mediaMode === "create" && (
+                <div className="flex flex-col gap-2">
+                  {/* text-to-image vs image-to-image */}
+                  <div className="flex w-fit rounded-full bg-bg p-0.5 text-xs">
+                    {(["text", "image"] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setGenSource(s)}
+                        className={`rounded-full px-3 py-1 font-medium transition-colors ${
+                          genSource === s ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+                        }`}
+                      >
+                        {s === "text" ? "From text" : "Edit an image"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* pick a source image for image-to-image */}
+                  {genSource === "image" &&
+                    (images.length === 0 ? (
+                      <p className="text-xs text-hint">No images yet — upload or generate one first, then come back to edit it.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {images.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setGenSourceId(m.id)}
+                            className={`overflow-hidden rounded-[var(--radius-control)] border-2 transition-colors ${
+                              genSourceId === m.id ? "border-peri-deep" : "border-transparent hover:border-hairline"
+                            }`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={m.url} alt="" className="h-14 w-14 object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
+                    <label className="flex items-center gap-1">
+                      Model
+                      <select value={genModel} onChange={(e) => setGenModel(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                        <option value="pro">Nano Banana Pro</option>
+                        <option value="flash">Nano Banana 2 (faster)</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      Ratio
+                      <select value={genAspect} onChange={(e) => setGenAspect(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                        <option value="1:1">1:1 Square</option>
+                        <option value="4:5">4:5 Portrait</option>
+                        <option value="9:16">9:16 Story / Reel</option>
+                        <option value="16:9">16:9 Landscape</option>
+                        <option value="3:4">3:4</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      Quality
+                      <select value={genSize} onChange={(e) => setGenSize(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                        <option value="1K">1K</option>
+                        <option value="2K">2K</option>
+                        <option value="4K">4K</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1">
+                      Images
+                      <select value={genCount} onChange={(e) => setGenCount(Number(e.target.value))} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+                        {[1, 2, 3, 4].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <textarea
+                      value={genPrompt}
+                      onChange={(e) => setGenPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void generateImage();
+                        }
+                      }}
+                      rows={2}
+                      placeholder={
+                        genSource === "image"
+                          ? "Describe the edit — e.g. 'place it on a marble counter, softer light'…"
+                          : "Describe an image for Alfred to generate…"
+                      }
+                      className="min-w-0 flex-1 resize-y rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void generateImage()}
+                      disabled={generating || !genPrompt.trim()}
+                      className="shrink-0 rounded-[var(--radius-control)] bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793] disabled:opacity-50"
+                    >
+                      {generating ? "Generating…" : genSource === "image" ? "Edit" : "Generate"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-hint">
+                    {genPrompt.length.toLocaleString()} characters · {MODEL_INFO[genModel].name} accepts up to ~
+                    {MODEL_INFO[genModel].tokens.toLocaleString()} tokens — keep it focused for the best result.
+                  </p>
+                  {genError && <p className="text-xs text-red-600">{genError}</p>}
+                </div>
+              )}
+
+              {/* Gallery */}
+              {media.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {media.map((m) => (
                     <div
@@ -444,18 +540,36 @@ export default function ContentStudio({
           </div>
 
           <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={
-                  m.role === "user"
-                    ? "max-w-[85%] self-end rounded-2xl rounded-br-sm bg-peri-soft px-3.5 py-2 text-sm text-peri-deep"
-                    : "max-w-[90%] self-start whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-bg px-3.5 py-2 text-sm text-ink"
-                }
-              >
-                {m.content}
-              </div>
-            ))}
+            {messages.map((m, i) =>
+              m.role === "user" ? (
+                <div
+                  key={i}
+                  className="max-w-[85%] self-end whitespace-pre-wrap rounded-2xl rounded-br-sm bg-peri-soft px-3.5 py-2 text-sm text-peri-deep"
+                >
+                  {m.content}
+                </div>
+              ) : (
+                <div key={i} className="flex max-w-[90%] flex-col gap-1 self-start">
+                  <div className="whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-bg px-3.5 py-2 text-sm text-ink">
+                    {m.content}
+                  </div>
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGenPrompt(m.content);
+                        setMediaMode("create");
+                        setGenSource("text");
+                        setGenError("");
+                      }}
+                      className="self-start text-[11px] font-medium text-peri-deep transition-opacity hover:opacity-80"
+                    >
+                      Use as image prompt →
+                    </button>
+                  )}
+                </div>
+              ),
+            )}
             {thinking && (
               <div className="max-w-[90%] self-start rounded-2xl rounded-bl-sm bg-bg px-3.5 py-2 text-sm text-hint">
                 Alfred is thinking…
@@ -466,8 +580,16 @@ export default function ContentStudio({
           <div className="border-t border-hairline px-4 py-3">
             <div className="flex items-end gap-2">
               <textarea
+                ref={chatRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  const el = chatRef.current;
+                  if (el) {
+                    el.style.height = "auto";
+                    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -476,7 +598,7 @@ export default function ContentStudio({
                 }}
                 rows={2}
                 placeholder="Your thoughts, a rough draft, or 'make it shorter'…"
-                className="min-h-0 flex-1 resize-none rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
+                className="max-h-56 min-h-0 flex-1 resize-none overflow-y-auto rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none"
               />
               <button
                 type="button"
