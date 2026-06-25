@@ -4,6 +4,7 @@ import { useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { createPost, updatePost, deletePost } from "@/lib/marketing/schedule-actions";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
+import ContentStudio from "@/components/marketing/ContentStudio";
 
 const STATUS_STYLE: Record<ContentStatus, string> = {
   idea: "bg-line text-hint",
@@ -59,6 +60,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draftingId, setDraftingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [studioId, setStudioId] = useState<string | null>(null);
 
   async function add() {
     const t = title.trim();
@@ -258,6 +260,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                   drafting={draftingId === p.id}
                   onToggle={() => toggleExpand(p.id)}
                   onDraft={() => draftPost(p)}
+                  onStudio={() => setStudioId(p.id)}
                   onBodyChange={bodyChange}
                   onBodySave={bodySave}
                   onStatus={setStatus}
@@ -280,6 +283,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                   drafting={draftingId === p.id}
                   onToggle={() => toggleExpand(p.id)}
                   onDraft={() => draftPost(p)}
+                  onStudio={() => setStudioId(p.id)}
                   onBodyChange={bodyChange}
                   onBodySave={bodySave}
                   onStatus={setStatus}
@@ -294,6 +298,25 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
           )}
         </>
       )}
+
+      {studioId &&
+        (() => {
+          const p = posts.find((x) => x.id === studioId);
+          if (!p) return null;
+          return (
+            <ContentStudio
+              post={p}
+              onClose={() => setStudioId(null)}
+              onTitle={setTitleOf}
+              onSaveTitle={saveTitle}
+              onChan={setChan}
+              onStatus={setStatus}
+              onSched={setSched}
+              onBodyChange={bodyChange}
+              onBodySave={bodySave}
+            />
+          );
+        })()}
       <div className="h-2" />
     </div>
   );
@@ -314,6 +337,7 @@ function Row({
   drafting,
   onToggle,
   onDraft,
+  onStudio,
   onBodyChange,
   onBodySave,
   onStatus,
@@ -328,6 +352,7 @@ function Row({
   drafting: boolean;
   onToggle: () => void;
   onDraft: () => void;
+  onStudio: () => void;
   onBodyChange: (id: string, b: string) => void;
   onBodySave: (id: string, b: string) => void;
   onStatus: (id: string, s: ContentStatus) => void;
@@ -389,6 +414,13 @@ function Row({
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={onStudio}
+          className="shrink-0 rounded-full bg-peri-soft px-2.5 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95"
+        >
+          Studio ⤢
+        </button>
         <button
           type="button"
           onClick={() => onRemove(post.id)}
