@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
+import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
+import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
    (title, channel, status, date, the post body, a live character read). Right = a
@@ -58,7 +60,43 @@ export default function ContentStudio({
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [media, setMedia] = useState<ContentMedia[]>([]);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Load attached media when the studio opens.
+  useEffect(() => {
+    let alive = true;
+    void getMedia(post.id).then((m) => {
+      if (alive) setMedia(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [post.id]);
+
+  async function uploadFiles(files: FileList) {
+    setUploading(true);
+    for (const file of Array.from(files)) {
+      const fd = new FormData();
+      fd.append("postId", post.id);
+      fd.append("file", file);
+      try {
+        const res = await fetch("/api/marketing/media/upload", { method: "POST", body: fd });
+        const data = (await res.json()) as { media?: ContentMedia };
+        if (data.media) setMedia((m) => [...m, data.media as ContentMedia]);
+      } catch {
+        /* upload is best-effort */
+      }
+    }
+    setUploading(false);
+  }
+
+  async function removeMedia(id: string) {
+    setMedia((m) => m.filter((x) => x.id !== id));
+    await deleteMedia(id);
+  }
 
   // Close on Escape; lock background scroll while open.
   useEffect(() => {
@@ -229,9 +267,65 @@ export default function ContentStudio({
               <span className="text-hint">Saved automatically</span>
             </div>
 
-            {/* Media — next phase */}
-            <div className="rounded-[var(--radius-control)] border border-dashed border-hairline px-4 py-4 text-center">
-              <p className="text-xs text-hint">Images &amp; video — coming next. You&apos;ll upload media here and Alfred can generate it for you.</p>
+            {/* Media */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium uppercase tracking-wider text-hint">Media</span>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="rounded-full bg-peri-soft px-3 py-1 text-xs font-medium text-peri-deep transition-colors hover:brightness-95 disabled:opacity-50"
+                >
+                  {uploading ? "Uploading…" : "Upload image / video"}
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length) void uploadFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              {media.length === 0 ? (
+                <div className="rounded-[var(--radius-control)] border border-dashed border-hairline px-4 py-4 text-center">
+                  <p className="text-xs text-hint">No media yet. Upload images or video for this post — Alfred image generation is coming next.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {media.map((m) => (
+                    <div
+                      key={m.id}
+                      className="group relative overflow-hidden rounded-[var(--radius-control)] border border-hairline bg-bg"
+                    >
+                      {m.kind === "video" ? (
+                        // eslint-disable-next-line jsx-a11y/media-has-caption
+                        <video src={m.url} controls className="h-28 w-full object-cover" />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.url} alt="" className="h-28 w-full object-cover" />
+                      )}
+                      {m.source === "ai" && (
+                        <span className="absolute left-1 top-1 rounded-full bg-peri-deep/90 px-1.5 text-[10px] font-medium text-white">
+                          AI
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void removeMedia(m.id)}
+                        aria-label="Remove media"
+                        className="absolute right-1 top-1 hidden rounded-full bg-black/60 px-1.5 py-0.5 text-xs leading-none text-white group-hover:block"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
