@@ -23,13 +23,14 @@ const STYLE =
   "muted elegant palette. No on-image text unless explicitly requested. Subject: ";
 
 type Part = { inlineData?: { data?: string; mimeType?: string }; inline_data?: { data?: string; mime_type?: string } };
+type GenResult = { data: string; mime: string } | { error: string; status?: number };
 
 async function callGemini(
   model: string,
   apiKey: string,
   prompt: string,
   cfg?: { aspectRatio: string; imageSize: string },
-): Promise<{ data: string; mime: string } | null> {
+): Promise<GenResult> {
   const generationConfig: Record<string, unknown> = { responseModalities: ["TEXT", "IMAGE"] };
   // aspectRatio / imageSize are only honoured by the Gemini 3 image models.
   if (cfg && model.startsWith("gemini-3")) {
@@ -43,7 +44,17 @@ async function callGemini(
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
     },
   ).catch(() => null);
-  if (!res || !res.ok) return null;
+  if (!res) return { error: "Couldn't reach Google." };
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    let msg = "";
+    try {
+      msg = (JSON.parse(txt) as { error?: { message?: string } })?.error?.message ?? "";
+    } catch {
+      /* non-JSON body */
+    }
+    return { error: msg || `Google returned ${res.status}.`, status: res.status };
+  }
   const json = (await res.json().catch(() => null)) as
     | { candidates?: { content?: { parts?: Part[] } }[] }
     | null;
@@ -53,7 +64,22 @@ async function callGemini(
     const m = p.inlineData?.mimeType ?? p.inline_data?.mime_type ?? "image/png";
     if (d) return { data: d, mime: m };
   }
-  return null;
+  return { error: "No image was returned." };
+}
+
+// Turn Google's raw error into something a non-technical user understands.
+function friendlyError(raw: string, status?: number): string {
+  const r = raw.toLowerCase();
+  if (status === 429 || r.includes("quota") || r.includes("rate limit")) {
+    return "Rate limit or quota reached. If you're on the free tier, enable billing on the Gemini project (marketing@) — or wait a moment and retry.";
+  }
+  if (status === 403 || r.includes("billing") || r.includes("free tier") || r.includes("not enabled") || r.includes("permission")) {
+    return "This image model needs billing enabled on the Gemini project. In Google AI Studio (signed in as marketing@) → Billing, add a card, then try again.";
+  }
+  if (status === 400 || r.includes("safety") || r.includes("blocked")) {
+    return "The request was rejected — try rewording the prompt.";
+  }
+  return raw ? `Google: ${raw}` : "Alfred couldn't generate an image just now.";
 }
 
 const ASPECTS = new Set(["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]);
@@ -85,11 +111,21 @@ export async function POST(req: Request) {
   const count = Math.min(4, Math.max(1, Math.round(body.count ?? 1)));
 
   const created: unknown[] = [];
+  let lastError = "";
+  let lastStatus: number | undefined;
   for (let i = 0; i < count; i++) {
     // Try the chosen model with the size config; fall back to the original model.
     let image = await callGemini(chosen, apiKey, STYLE + userPrompt, { aspectRatio, imageSize });
-    if (!image) image = await callGemini(FALLBACK_MODEL, apiKey, STYLE + userPrompt);
-    if (!image) continue;
+    if ("error" in image) {
+      lastError = image.error;
+      lastStatus = image.status;
+      image = await callGemini(FALLBACK_MODEL, apiKey, STYLE + userPrompt);
+    }
+    if ("error" in image) {
+      lastError = image.error;
+      lastStatus = image.status;
+      continue;
+    }
 
     const ext = image.mime.includes("jpeg") ? "jpg" : image.mime.includes("webp") ? "webp" : "png";
     const rand = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${i}`;
@@ -114,7 +150,7 @@ export async function POST(req: Request) {
   }
 
   if (created.length === 0) {
-    return NextResponse.json({ error: "Alfred couldn't generate an image just now." }, { status: 502 });
+    return NextResponse.json({ error: friendlyError(lastError, lastStatus) }, { status: 502 });
   }
   return NextResponse.json({ media: created });
 }

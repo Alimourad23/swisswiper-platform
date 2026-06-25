@@ -26,6 +26,12 @@ const CHAR_LIMIT: Record<string, number> = {
 
 type Msg = { role: "user" | "assistant"; content: string };
 
+// Nano Banana models — input prompt limits (tokens) for the on-screen guide.
+const MODEL_INFO: Record<string, { name: string; tokens: number }> = {
+  pro: { name: "Nano Banana Pro", tokens: 65536 },
+  flash: { name: "Nano Banana 2", tokens: 131072 },
+};
+
 export default function ContentStudio({
   post,
   onClose,
