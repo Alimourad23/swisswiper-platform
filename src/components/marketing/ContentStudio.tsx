@@ -169,6 +169,14 @@ export default function ContentStudio({
               />
             </div>
 
+            {post.scheduled_for && (
+              <p className="text-xs text-peri-deep">
+                {post.gcal_event_ids && post.gcal_event_ids.length > 0
+                  ? "📅 On your Google Calendar — planning, drafting & publish-day reminders are set."
+                  : "📅 Scheduling adds planning, drafting & publish-day reminders to your Google Calendar."}
+              </p>
+            )}
+
             <textarea
               value={post.body}
               onChange={(e) => onBodyChange(post.id, e.target.value)}

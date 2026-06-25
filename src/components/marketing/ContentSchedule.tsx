@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { createPost, updatePost, deletePost } from "@/lib/marketing/schedule-actions";
+import { syncPostCalendar, clearPostCalendar } from "@/lib/marketing/calendar-sync";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import ContentStudio from "@/components/marketing/ContentStudio";
 import MonthGrid from "@/components/marketing/MonthGrid";
@@ -78,6 +79,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
     const bump = post?.status === "idea";
     patch(id, { scheduled_for: d, ...(bump ? { status: "scheduled" as ContentStatus } : {}) });
     void updatePost(id, { scheduledFor: d, ...(bump ? { status: "scheduled" } : {}) });
+    void syncCal(id, { scheduled_for: d });
   };
 
   async function add() {
@@ -102,6 +104,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
         },
         ...p,
       ]);
+      if (date) void syncCal(r.id, { scheduled_for: date, title: t, channel, body: "" });
       setTitle("");
       setDate("");
     }
@@ -110,6 +113,22 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   function patch(id: string, p: Partial<ContentPost>) {
     setPosts((all) => all.map((x) => (x.id === id ? { ...x, ...p } : x)));
   }
+  const tzNow = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const isDated = (id: string) => Boolean(posts.find((x) => x.id === id)?.scheduled_for);
+  async function syncCal(id: string, overrides?: Partial<ContentPost>) {
+    const cur = posts.find((x) => x.id === id);
+    const p = { ...(cur ?? {}), ...(overrides ?? {}) } as ContentPost;
+    const r = await syncPostCalendar({
+      postId: id,
+      scheduledFor: p.scheduled_for ?? null,
+      title: p.title ?? "",
+      channel: p.channel ?? "linkedin",
+      body: p.body ?? "",
+      timeZone: tzNow(),
+      todayStr: todayStr(),
+    });
+    if (r.ok) patch(id, { gcal_event_ids: r.ids });
+  }
   const setStatus = (id: string, status: ContentStatus) => {
     patch(id, { status });
     void updatePost(id, { status });
@@ -117,20 +136,28 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const setSched = (id: string, d: string) => {
     patch(id, { scheduled_for: d || null });
     void updatePost(id, { scheduledFor: d || null });
+    void syncCal(id, { scheduled_for: d || null });
   };
   const setChan = (id: string, ch: string) => {
     patch(id, { channel: ch });
     void updatePost(id, { channel: ch });
+    if (isDated(id)) void syncCal(id, { channel: ch });
   };
   const setTitleOf = (id: string, t: string) => patch(id, { title: t });
-  const saveTitle = (id: string, t: string) => void updatePost(id, { title: t.trim() });
+  const saveTitle = (id: string, t: string) => {
+    void updatePost(id, { title: t.trim() });
+    if (isDated(id)) void syncCal(id, { title: t.trim() });
+  };
   const remove = (id: string) => {
     setPosts((p) => p.filter((x) => x.id !== id));
-    void deletePost(id);
+    void clearPostCalendar(id).then(() => deletePost(id));
   };
   const toggleExpand = (id: string) => setExpandedId((c) => (c === id ? null : id));
   const bodyChange = (id: string, b: string) => patch(id, { body: b });
-  const bodySave = (id: string, b: string) => void updatePost(id, { body: b });
+  const bodySave = (id: string, b: string) => {
+    void updatePost(id, { body: b });
+    if (isDated(id)) void syncCal(id, { body: b });
+  };
   async function draftPost(post: ContentPost) {
     if (draftingId) return;
     setDraftingId(post.id);
@@ -433,6 +460,11 @@ function Row({
           className="min-w-[10rem] flex-1 bg-transparent text-sm text-ink focus:outline-none"
         />
         {post.body && !expanded && <span className="shrink-0 text-[11px] text-emerald-600">drafted</span>}
+        {post.gcal_event_ids && post.gcal_event_ids.length > 0 && (
+          <span className="shrink-0 text-[11px] text-peri-deep" title="Plan, draft & publish events are on your Google Calendar">
+            📅 On calendar
+          </span>
+        )}
         <select
           value={post.channel}
           onChange={(e) => onChan(post.id, e.target.value)}

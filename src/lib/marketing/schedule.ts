@@ -16,6 +16,8 @@ export type ContentPost = {
   notes: string;
   created_at: string;
   updated_at: string;
+  /** Google Calendar event IDs created for this post (plan/draft/announce). */
+  gcal_event_ids?: string[] | null;
 };
 
 export const CONTENT_STATUSES: { key: ContentStatus; label: string }[] = [
