@@ -155,7 +155,11 @@ export const founderNav: NavItem[] = [
     href: "/dashboard/marketing",
     icon: icons.marketing,
     live: true,
-    children: [{ name: "LinkedIn", href: "/dashboard/marketing/linkedin" }],
+    children: [
+      { name: "Plan", href: "/dashboard/marketing/plan" },
+      { name: "Calendar", href: "/dashboard/marketing/calendar" },
+      { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
+    ],
   },
 ];
 

@@ -1,8 +1,7 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import ModuleHeader from "@/components/ModuleHeader";
 import MarketingOverviewClient from "@/components/marketing/MarketingOverviewClient";
-import ContentSchedule from "@/components/marketing/ContentSchedule";
-import MarketingPlanCard from "@/components/marketing/MarketingPlan";
 import WeeklyReport from "@/components/marketing/WeeklyReport";
 import { getModule } from "@/lib/modules";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
@@ -18,7 +17,7 @@ export default function MarketingPage() {
       <ModuleHeader
         icon={m.icon}
         title={m.name}
-        subtitle="Plan, schedule and measure your content. LinkedIn analytics are live."
+        subtitle="Executive summary and performance. Plan and Calendar live in the menu."
         right={<span className="text-xs text-hint">1 of 5 channels connected</span>}
       />
       <Suspense fallback={<MetricsSkeleton />}>
@@ -36,8 +35,20 @@ async function MarketingData() {
   ]);
   return (
     <div className="flex flex-col gap-6">
-      <MarketingPlanCard initial={plan} />
-      <ContentSchedule initialPosts={posts} />
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/dashboard/marketing/plan"
+          className="rounded-full bg-peri-soft px-4 py-1.5 text-sm font-medium text-peri-deep transition-colors hover:brightness-95"
+        >
+          Marketing plan →
+        </Link>
+        <Link
+          href="/dashboard/marketing/calendar"
+          className="rounded-full bg-peri-soft px-4 py-1.5 text-sm font-medium text-peri-deep transition-colors hover:brightness-95"
+        >
+          Content calendar →
+        </Link>
+      </div>
       <WeeklyReport metrics={metrics} posts={posts} goal={plan.goals} />
       <MarketingOverviewClient metrics={metrics} />
     </div>
