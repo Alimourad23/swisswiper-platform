@@ -43,6 +43,12 @@ async function MarketingData() {
           Marketing plan →
         </Link>
         <Link
+          href="/dashboard/marketing/pipeline"
+          className="rounded-full bg-peri-soft px-4 py-1.5 text-sm font-medium text-peri-deep transition-colors hover:brightness-95"
+        >
+          Pipeline →
+        </Link>
+        <Link
           href="/dashboard/marketing/calendar"
           className="rounded-full bg-peri-soft px-4 py-1.5 text-sm font-medium text-peri-deep transition-colors hover:brightness-95"
         >

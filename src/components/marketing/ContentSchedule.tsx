@@ -54,7 +54,13 @@ function weekRange(): { start: string; end: string } {
 const inputCls =
   "rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none";
 
-export default function ContentSchedule({ initialPosts }: { initialPosts: ContentPost[] }) {
+export default function ContentSchedule({
+  initialPosts,
+  view,
+}: {
+  initialPosts: ContentPost[];
+  view: "calendar" | "list";
+}) {
   const [posts, setPosts] = useState<ContentPost[]>(initialPosts);
   const [title, setTitle] = useState("");
   const [channel, setChannel] = useState("linkedin");
@@ -64,7 +70,6 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [studioId, setStudioId] = useState<string | null>(null);
-  const [view, setView] = useState<"calendar" | "list">("calendar");
   const [month, setMonth] = useState<Date>(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -188,23 +193,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
             This week: {toPostWeek} to post · {publishedWeek} published
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <div className="flex rounded-full bg-bg p-0.5">
-            {(["calendar", "list"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
-                  view === v ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-          <span className="text-xs text-hint">{posts.length} planned</span>
-        </div>
+        <span className="shrink-0 text-xs text-hint">{posts.length} planned</span>
       </div>
 
       {/* Quick add */}

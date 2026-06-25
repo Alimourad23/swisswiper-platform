@@ -157,6 +157,7 @@ export const founderNav: NavItem[] = [
     live: true,
     children: [
       { name: "Plan", href: "/dashboard/marketing/plan" },
+      { name: "Pipeline", href: "/dashboard/marketing/pipeline" },
       { name: "Calendar", href: "/dashboard/marketing/calendar" },
       { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
     ],
