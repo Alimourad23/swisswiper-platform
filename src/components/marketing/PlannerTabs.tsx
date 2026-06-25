@@ -6,7 +6,15 @@ import ManualPlanner from "@/components/marketing/ManualPlanner";
 import type { MonthPlan } from "@/lib/marketing/monthly";
 
 /* Two ways to plan a month: let Alfred suggest, or plan ahead yourself. */
-export default function PlannerTabs({ plan, monthKey }: { plan: MonthPlan | null; monthKey: string }) {
+export default function PlannerTabs({
+  plan,
+  monthKey,
+  counts,
+}: {
+  plan: MonthPlan | null;
+  monthKey: string;
+  counts: Record<string, number>;
+}) {
   const [tab, setTab] = useState<"alfred" | "manual">("alfred");
   return (
     <div className="flex flex-col gap-3">
@@ -31,7 +39,7 @@ export default function PlannerTabs({ plan, monthKey }: { plan: MonthPlan | null
       </div>
 
       {tab === "alfred" ? (
-        <MonthPlanBanner plan={plan} monthKey={monthKey} />
+        <MonthPlanBanner plan={plan} monthKey={monthKey} counts={counts} />
       ) : (
         <div className="sw-card px-6 py-5">
           <ManualPlanner monthKey={monthKey} />

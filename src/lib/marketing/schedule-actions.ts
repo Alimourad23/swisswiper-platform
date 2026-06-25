@@ -56,7 +56,15 @@ export async function createPost(input: {
 /* Create many posts at once (used by the manual planner). Each becomes a
    scheduled post on its assigned date. */
 export async function createPostsBulk(
-  items: { title: string; channel: string; scheduledFor: string; notes?: string }[],
+  items: {
+    title: string;
+    channel: string;
+    scheduledFor: string;
+    notes?: string;
+    seedIdea?: string;
+    goal?: string;
+    source?: string;
+  }[],
 ): Promise<{ ok: boolean; added: number }> {
   const c = await uid();
   if (!c) return { ok: false, added: 0 };
@@ -69,6 +77,9 @@ export async function createPostsBulk(
       status: "scheduled",
       scheduled_for: it.scheduledFor || null,
       notes: it.notes ?? "",
+      seed_idea: it.seedIdea ?? null,
+      goal: it.goal ?? null,
+      source: it.source ?? "manual",
     }));
   if (rows.length === 0) return { ok: true, added: 0 };
   const { error } = await c.supabase.from("content_posts").insert(rows);

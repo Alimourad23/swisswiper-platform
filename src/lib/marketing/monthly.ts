@@ -7,6 +7,7 @@ export type MonthSuggestion = {
   title: string; // short hook / working title
   idea: string; // one-line description of the post
   day: number; // 1–28, day of the target month
+  goal?: string; // secondary goal: awareness | followers | inquiries | community
 };
 
 export type MonthPlanStatus = "suggested" | "applied" | "dismissed";

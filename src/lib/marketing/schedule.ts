@@ -18,6 +18,12 @@ export type ContentPost = {
   updated_at: string;
   /** Google Calendar event IDs created for this post (plan/draft/announce). */
   gcal_event_ids?: string[] | null;
+  /** Alfred's one-line brief (auto-draft seed); set when the post came from a suggestion. */
+  seed_idea?: string | null;
+  /** Secondary goal: awareness | followers | inquiries | community. */
+  goal?: string | null;
+  /** Where the post came from: manual | alfred. */
+  source?: string | null;
 };
 
 export const CONTENT_STATUSES: { key: ContentStatus; label: string }[] = [

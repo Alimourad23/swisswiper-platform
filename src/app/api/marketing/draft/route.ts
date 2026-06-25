@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  let body: { title?: string; channel?: string };
+  let body: { title?: string; channel?: string; brief?: string };
   try {
     body = await req.json();
   } catch {
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
   const topic = (body.title ?? "").trim();
   if (!topic) return NextResponse.json({ error: "No topic." }, { status: 400 });
   const channel = (body.channel ?? "linkedin").toLowerCase();
+  const brief = (body.brief ?? "").trim();
   const guide = CHANNEL_GUIDE[channel] ?? CHANNEL_GUIDE.linkedin;
 
   const system =
@@ -53,7 +54,9 @@ export async function POST(req: Request) {
       model: "claude-sonnet-4-6",
       max_tokens: 700,
       system,
-      messages: [{ role: "user", content: `Channel: ${channel}.\nTopic: ${topic}` }],
+      messages: [
+        { role: "user", content: `Channel: ${channel}.\nTopic: ${topic}${brief ? `\nBrief: ${brief}` : ""}` },
+      ],
     });
     const text = resp.content
       .map((b) => (b.type === "text" ? b.text : ""))

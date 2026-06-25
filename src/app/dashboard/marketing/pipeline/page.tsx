@@ -12,6 +12,15 @@ export default async function MarketingPipelinePage() {
   const m = getModule("marketing")!;
   const key = monthKey(); // next month
   const [posts, monthPlan] = await Promise.all([getContentPosts(), getMonthPlan(key)]);
+
+  // Posts already planned for the target month, counted per channel (for the counter).
+  const counts: Record<string, number> = {};
+  for (const p of posts) {
+    if (p.scheduled_for && p.scheduled_for.startsWith(key)) {
+      counts[p.channel] = (counts[p.channel] ?? 0) + 1;
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <ModuleHeader
@@ -19,7 +28,7 @@ export default async function MarketingPipelinePage() {
         title="Pipeline"
         subtitle="Every post from idea to published — plan, queue and open the Studio to draft."
       />
-      <PlannerTabs plan={monthPlan} monthKey={key} />
+      <PlannerTabs plan={monthPlan} monthKey={key} counts={counts} />
       <ContentSchedule initialPosts={posts} view="list" />
     </div>
   );

@@ -95,6 +95,33 @@ export default function ContentStudio({
     };
   }, [post.id]);
 
+  // Auto-draft the copy from Alfred's seed idea (once) when the post came from a
+  // suggestion and has no body yet.
+  const autoDraftedRef = useRef<string | null>(null);
+  const [autoDrafting, setAutoDrafting] = useState(false);
+  useEffect(() => {
+    if (!post.seed_idea || post.body || autoDraftedRef.current === post.id) return;
+    autoDraftedRef.current = post.id;
+    setAutoDrafting(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/marketing/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: post.title, channel: post.channel, brief: post.seed_idea }),
+        });
+        const data = (await res.json()) as { text?: string };
+        if (data.text) {
+          onBodyChange(post.id, data.text);
+          onBodySave(post.id, data.text);
+        }
+      } catch {
+        /* auto-draft is best-effort */
+      }
+      setAutoDrafting(false);
+    })();
+  }, [post.id, post.seed_idea, post.body, post.title, post.channel, onBodyChange, onBodySave]);
+
   async function uploadFiles(files: FileList) {
     setUploading(true);
     for (const file of Array.from(files)) {
@@ -321,7 +348,7 @@ export default function ContentStudio({
               <span className={over ? "text-red-600" : "text-hint"}>
                 {len.toLocaleString()} characters{limit ? ` · ${channelName(post.channel)} limit ${limit.toLocaleString()}` : ""}
               </span>
-              <span className="text-hint">Saved automatically</span>
+              <span className="text-hint">{autoDrafting ? "Alfred is drafting from his idea…" : "Saved automatically"}</span>
             </div>
 
             {/* Media */}
