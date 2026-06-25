@@ -5,6 +5,7 @@ import { channels } from "@/lib/marketing/channels";
 import { createPost, updatePost, deletePost } from "@/lib/marketing/schedule-actions";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import ContentStudio from "@/components/marketing/ContentStudio";
+import MonthGrid from "@/components/marketing/MonthGrid";
 
 const STATUS_STYLE: Record<ContentStatus, string> = {
   idea: "bg-line text-hint",
@@ -61,6 +62,23 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
   const [draftingId, setDraftingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [studioId, setStudioId] = useState<string | null>(null);
+  const [view, setView] = useState<"calendar" | "list">("calendar");
+  const [month, setMonth] = useState<Date>(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const prevMonth = () => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1));
+  const nextMonth = () => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1));
+  const thisMonth = () => {
+    const d = new Date();
+    setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+  };
+  const moveToDate = (id: string, d: string) => {
+    const post = posts.find((x) => x.id === id);
+    const bump = post?.status === "idea";
+    patch(id, { scheduled_for: d, ...(bump ? { status: "scheduled" as ContentStatus } : {}) });
+    void updatePost(id, { scheduledFor: d, ...(bump ? { status: "scheduled" } : {}) });
+  };
 
   async function add() {
     const t = title.trim();
@@ -164,7 +182,23 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
             This week: {toPostWeek} to post · {publishedWeek} published
           </p>
         </div>
-        <span className="shrink-0 text-xs text-hint">{posts.length} planned</span>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="flex rounded-full bg-bg p-0.5">
+            {(["calendar", "list"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
+                  view === v ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-hint">{posts.length} planned</span>
+        </div>
       </div>
 
       {/* Quick add */}
@@ -250,6 +284,18 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
             </div>
           )}
 
+          {view === "calendar" ? (
+            <MonthGrid
+              posts={shown}
+              month={month}
+              onPrev={prevMonth}
+              onNext={nextMonth}
+              onToday={thisMonth}
+              onMove={moveToDate}
+              onOpen={setStudioId}
+            />
+          ) : (
+            <>
           {scheduled.length > 0 && (
             <Section label="Scheduled">
               {scheduled.map((p) => (
@@ -295,6 +341,8 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
                 />
               ))}
             </Section>
+          )}
+            </>
           )}
         </>
       )}
