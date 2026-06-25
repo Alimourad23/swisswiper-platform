@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailTemplate } from "@/lib/notifications";
 import { buildMonthSuggestions } from "@/lib/marketing/monthly-generate";
+import { assignOpenDates, recommendedCount, CADENCE } from "@/lib/marketing/cadence";
 import { MIN_PLANNED_PER_MONTH, monthKey, monthLabel, type MonthSuggestion } from "@/lib/marketing/monthly";
 
 export const dynamic = "force-dynamic";
@@ -45,24 +46,47 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, skipped: "month already planned", planned: count });
   }
 
-  // Context: the marketing plan + recent posts.
-  const [{ data: planRow }, { data: postRows }] = await Promise.all([
+  // Context: the marketing plan + recent posts + what's already planned next month.
+  const [{ data: planRow }, { data: postRows }, { data: monthRows }] = await Promise.all([
     admin.from("marketing_plan").select("*").limit(1).maybeSingle(),
     admin
       .from("content_posts")
       .select("title, channel, scheduled_for, status")
       .order("created_at", { ascending: false })
       .limit(20),
+    admin
+      .from("content_posts")
+      .select("title, channel, scheduled_for, status")
+      .gte("scheduled_for", monthStart)
+      .lt("scheduled_for", nextStart),
   ]);
 
-  const suggestions = await buildMonthSuggestions({
+  const monthPosts = (monthRows as { title: string; channel: string; scheduled_for: string | null; status: string }[]) ?? [];
+  const planned: Record<string, number> = {};
+  const takenByChannel: Record<string, string[]> = {};
+  for (const p of monthPosts) {
+    planned[p.channel] = (planned[p.channel] ?? 0) + 1;
+    if (p.scheduled_for) (takenByChannel[p.channel] ??= []).push(p.scheduled_for);
+  }
+  const need: Record<string, number> = {};
+  for (const ch of Object.keys(CADENCE)) {
+    const g = recommendedCount(ch) - (planned[ch] ?? 0);
+    if (g > 0) need[ch] = g;
+  }
+
+  const raw = await buildMonthSuggestions({
     monthKey: key,
     plan: (planRow as Record<string, string> | null) ?? {},
     recentPosts: (postRows as { title: string; channel: string; scheduled_for: string | null; status: string }[]) ?? [],
+    thisMonthPosts: monthPosts,
+    need,
   });
-  if (suggestions.length === 0) {
+  if (raw.length === 0) {
     return NextResponse.json({ ok: true, skipped: "no suggestions generated" });
   }
+  // Next month → no today-floor needed; just place on open cadence days.
+  const dates = assignOpenDates(key, raw, { takenByChannel });
+  const suggestions: MonthSuggestion[] = raw.map((s, i) => ({ ...s, date: dates[i] }));
 
   await admin.from("marketing_month_plans").insert({ month: key, status: "suggested", suggestions });
 

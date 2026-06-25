@@ -31,7 +31,7 @@ function pad(n: number) {
 }
 
 /* All YYYY-MM-DD dates in a 'YYYY-MM' month whose weekday is in `days`. */
-function candidateDates(monthKey: string, days: number[]): string[] {
+export function candidateDates(monthKey: string, days: number[]): string[] {
   const [y, m] = monthKey.split("-").map(Number);
   const last = new Date(y, m, 0).getDate();
   const out: string[] = [];
@@ -53,30 +53,55 @@ function pickEven(cands: string[], k: number): string[] {
 export type PlanItem = { title: string; channel: string };
 export type ScheduledItem = PlanItem & { date: string; time: string };
 
-/* Assign each item a date within `monthKey`, per its channel's cadence. Items are
-   grouped by channel, distributed across that channel's recommended days, then
-   returned in the original order. */
-export function autoSchedule(monthKey: string, items: PlanItem[]): ScheduledItem[] {
-  const valid = items.filter((it) => it.title.trim());
-  // Group indices by channel to preserve input order on the way out.
+export type AssignOpts = {
+  /** Earliest allowed date (YYYY-MM-DD) — e.g. today for the current month. */
+  floor?: string;
+  /** Dates already used per channel, so we don't double-book a slot. */
+  takenByChannel?: Record<string, string[]>;
+};
+
+/* Assign each item an OPEN best-practice date within `monthKey`: on the channel's
+   recommended weekdays, on/after `floor`, skipping dates already taken for that
+   channel (and de-duplicating within the batch). Returns dates aligned to input.
+   Falls back to wrapping when there are more items than open slots. */
+export function assignOpenDates(monthKey: string, items: { channel: string }[], opts: AssignOpts = {}): string[] {
+  const taken: Record<string, Set<string>> = {};
+  for (const [ch, ds] of Object.entries(opts.takenByChannel ?? {})) taken[ch] = new Set(ds);
+
   const byChannel = new Map<string, number[]>();
-  valid.forEach((it, i) => {
+  items.forEach((it, i) => {
     const list = byChannel.get(it.channel) ?? [];
     list.push(i);
     byChannel.set(it.channel, list);
   });
 
-  const dateByIndex = new Map<number, string>();
+  const out: string[] = new Array(items.length).fill("");
   for (const [channel, indices] of byChannel) {
     const cad = cadenceFor(channel);
-    const dates = pickEven(candidateDates(monthKey, cad.days), indices.length);
-    indices.forEach((idx, j) => dateByIndex.set(idx, dates[j] ?? `${monthKey}-15`));
+    const used = taken[channel] ?? new Set<string>();
+    const open = candidateDates(monthKey, cad.days).filter((d) => (!opts.floor || d >= opts.floor) && !used.has(d));
+    const fallback =
+      open[0] ?? candidateDates(monthKey, cad.days).find((d) => !opts.floor || d >= opts.floor) ?? opts.floor ?? `${monthKey}-15`;
+    const picks = pickEven(open, indices.length);
+    indices.forEach((idx, j) => {
+      const date = picks[j] ?? fallback;
+      out[idx] = date;
+      used.add(date); // don't reuse within this batch
+    });
+    taken[channel] = used;
   }
+  return out;
+}
 
+/* Manual planner: assign each item a date within `monthKey` on its channel's
+   recommended days, never before `floor` (today, for the current month). */
+export function autoSchedule(monthKey: string, items: PlanItem[], floor?: string): ScheduledItem[] {
+  const valid = items.filter((it) => it.title.trim());
+  const dates = assignOpenDates(monthKey, valid, { floor });
   return valid.map((it, i) => ({
     title: it.title.trim(),
     channel: it.channel,
-    date: dateByIndex.get(i) ?? `${monthKey}-15`,
+    date: dates[i] || `${monthKey}-15`,
     time: cadenceFor(it.channel).time,
   }));
 }

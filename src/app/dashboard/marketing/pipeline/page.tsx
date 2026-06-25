@@ -4,20 +4,23 @@ import PlannerTabs from "@/components/marketing/PlannerTabs";
 import { getModule } from "@/lib/modules";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getMonthPlan } from "@/lib/marketing/monthly-actions";
-import { monthKey } from "@/lib/marketing/monthly";
+import { horizonMonths } from "@/lib/marketing/monthly";
 
 export const dynamic = "force-dynamic";
 
 export default async function MarketingPipelinePage() {
   const m = getModule("marketing")!;
-  const key = monthKey(); // next month
+  const months = horizonMonths(6); // current + next 5
+  const key = months[0]; // default: the current month (plan the rest of it)
   const [posts, monthPlan] = await Promise.all([getContentPosts(), getMonthPlan(key)]);
 
-  // Posts already planned for the target month, counted per channel (for the counter).
-  const counts: Record<string, number> = {};
+  // Planned posts per channel, per month (for the gap counter across the horizon).
+  const countsByMonth: Record<string, Record<string, number>> = {};
+  for (const k of months) countsByMonth[k] = {};
   for (const p of posts) {
-    if (p.scheduled_for && p.scheduled_for.startsWith(key)) {
-      counts[p.channel] = (counts[p.channel] ?? 0) + 1;
+    const mk = p.scheduled_for?.slice(0, 7);
+    if (mk && countsByMonth[mk]) {
+      countsByMonth[mk][p.channel] = (countsByMonth[mk][p.channel] ?? 0) + 1;
     }
   }
 
@@ -28,7 +31,7 @@ export default async function MarketingPipelinePage() {
         title="Pipeline"
         subtitle="Every post from idea to published — plan, queue and open the Studio to draft."
       />
-      <PlannerTabs plan={monthPlan} monthKey={key} counts={counts} />
+      <PlannerTabs plan={monthPlan} monthKey={key} months={months} countsByMonth={countsByMonth} />
       <ContentSchedule initialPosts={posts} view="list" />
     </div>
   );

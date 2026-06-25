@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { channels } from "@/lib/marketing/channels";
 import { autoSchedule, cadenceFor, type ScheduledItem } from "@/lib/marketing/cadence";
-import { monthKey, monthLabel } from "@/lib/marketing/monthly";
+import { floorForMonth, monthLabel } from "@/lib/marketing/monthly";
 import { createPostsBulk } from "@/lib/marketing/schedule-actions";
 
 /* Plan-ahead-yourself: type post titles, pick a channel, and the planner spreads
@@ -21,9 +21,9 @@ function fmtDate(d: string): string {
 const inputCls =
   "rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-2 text-sm text-ink placeholder:text-hint focus:border-peri-deep focus:outline-none";
 
-export default function ManualPlanner({ monthKey: defaultKey }: { monthKey: string }) {
+export default function ManualPlanner({ months }: { months: string[] }) {
   const router = useRouter();
-  const [month, setMonth] = useState(defaultKey);
+  const [month, setMonth] = useState(months[0]);
   const [rows, setRows] = useState<Row[]>([
     { title: "", channel: "linkedin" },
     { title: "", channel: "linkedin" },
@@ -32,9 +32,6 @@ export default function ManualPlanner({ monthKey: defaultKey }: { monthKey: stri
   const [scheduled, setScheduled] = useState<ScheduledItem[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [added, setAdded] = useState(0);
-
-  // Next 3 months to choose from.
-  const monthOptions = useMemo(() => [monthKey(new Date(), 0), monthKey(new Date(), 1), monthKey(new Date(), 2)], []);
 
   const setRow = (i: number, patch: Partial<Row>) =>
     setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -45,7 +42,8 @@ export default function ManualPlanner({ monthKey: defaultKey }: { monthKey: stri
 
   function schedule() {
     setAdded(0);
-    setScheduled(autoSchedule(month, rows));
+    // Never schedule before today when planning the current month.
+    setScheduled(autoSchedule(month, rows, floorForMonth(month)));
   }
 
   async function addAll() {
@@ -70,7 +68,7 @@ export default function ManualPlanner({ monthKey: defaultKey }: { monthKey: stri
         <label className="flex items-center gap-1 text-xs text-muted">
           Month
           <select value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
-            {monthOptions.map((k) => (
+            {months.map((k) => (
               <option key={k} value={k}>
                 {monthLabel(k)}
               </option>

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buildMonthSuggestions } from "@/lib/marketing/monthly-generate";
 import { createPostsBulk } from "@/lib/marketing/schedule-actions";
-import { monthKey as nextMonthKey, type MonthPlan, type MonthSuggestion } from "@/lib/marketing/monthly";
+import { assignOpenDates, recommendedCount, CADENCE } from "@/lib/marketing/cadence";
+import { floorForMonth, monthKey as nextMonthKey, type MonthPlan, type MonthSuggestion } from "@/lib/marketing/monthly";
 
 async function uid() {
   const supabase = await createClient();
@@ -40,11 +41,31 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, k
       .gte("scheduled_for", start)
       .lt("scheduled_for", nextStart),
   ]);
+  const thisMonth = (thisRows as CtxPost[]) ?? [];
+  // Per-channel counts + the dates already taken (so we never double-book).
+  const plannedByChannel: Record<string, number> = {};
+  const takenByChannel: Record<string, string[]> = {};
+  for (const p of thisMonth) {
+    plannedByChannel[p.channel] = (plannedByChannel[p.channel] ?? 0) + 1;
+    if (p.scheduled_for) (takenByChannel[p.channel] ??= []).push(p.scheduled_for);
+  }
   return {
     plan: (planRow as Record<string, string> | null) ?? {},
     recent: (recentRows as CtxPost[]) ?? [],
-    thisMonth: (thisRows as CtxPost[]) ?? [],
+    thisMonth,
+    plannedByChannel,
+    takenByChannel,
   };
+}
+
+// Gap to the recommended monthly volume, per channel.
+function gapByChannel(planned: Record<string, number>): Record<string, number> {
+  const need: Record<string, number> = {};
+  for (const ch of Object.keys(CADENCE)) {
+    const g = recommendedCount(ch) - (planned[ch] ?? 0);
+    if (g > 0) need[ch] = g;
+  }
+  return need;
 }
 
 /* The plan for a given month (defaults to next month), whatever its status. */
@@ -63,14 +84,19 @@ export async function generateMonthPlanNow(month?: string, count?: number): Prom
   const key = month ?? nextMonthKey();
   const ctx = await loadContext(c.supabase, key);
 
-  const suggestions = await buildMonthSuggestions({
+  const raw = await buildMonthSuggestions({
     monthKey: key,
     plan: ctx.plan,
     recentPosts: ctx.recent,
     thisMonthPosts: ctx.thisMonth,
     count,
+    need: gapByChannel(ctx.plannedByChannel),
   });
-  if (suggestions.length === 0) return null;
+  if (raw.length === 0) return null;
+
+  // Engine assigns real open dates: on-cadence, on/after today, skipping taken days.
+  const dates = assignOpenDates(key, raw, { floor: floorForMonth(key), takenByChannel: ctx.takenByChannel });
+  const suggestions: MonthSuggestion[] = raw.map((s, i) => ({ ...s, date: dates[i] }));
 
   const { data } = await c.supabase
     .from("marketing_month_plans")
@@ -100,15 +126,26 @@ export async function suggestMoreMonthPlan(month: string, count = 5): Promise<Mo
 
   const dedupContext: CtxPost[] = [
     ...ctx.thisMonth,
-    ...existingSugg.map((s) => ({ title: s.title, channel: s.channel, scheduled_for: null, status: "suggested" })),
+    ...existingSugg.map((s) => ({ title: s.title, channel: s.channel, scheduled_for: s.date ?? null, status: "suggested" })),
   ];
-  const more = await buildMonthSuggestions({
+  // Count existing suggestions toward the planned tally so we only fill what's left.
+  const plannedPlusSugg = { ...ctx.plannedByChannel };
+  for (const s of existingSugg) plannedPlusSugg[s.channel] = (plannedPlusSugg[s.channel] ?? 0) + 1;
+
+  const raw = await buildMonthSuggestions({
     monthKey: month,
     plan: ctx.plan,
     recentPosts: ctx.recent,
     thisMonthPosts: dedupContext,
     count,
+    need: gapByChannel(plannedPlusSugg),
   });
+
+  // Open dates, treating existing suggestion dates (and posts) as taken.
+  const takenPlus = { ...ctx.takenByChannel } as Record<string, string[]>;
+  for (const s of existingSugg) if (s.date) (takenPlus[s.channel] ??= []).push(s.date);
+  const dates = assignOpenDates(month, raw, { floor: floorForMonth(month), takenByChannel: takenPlus });
+  const more: MonthSuggestion[] = raw.map((s, i) => ({ ...s, date: dates[i] }));
   const merged = [...existingSugg, ...more];
 
   const { data } = await c.supabase

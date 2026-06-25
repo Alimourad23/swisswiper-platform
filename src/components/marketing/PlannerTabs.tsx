@@ -9,11 +9,13 @@ import type { MonthPlan } from "@/lib/marketing/monthly";
 export default function PlannerTabs({
   plan,
   monthKey,
-  counts,
+  months,
+  countsByMonth,
 }: {
   plan: MonthPlan | null;
   monthKey: string;
-  counts: Record<string, number>;
+  months: string[];
+  countsByMonth: Record<string, Record<string, number>>;
 }) {
   const [tab, setTab] = useState<"alfred" | "manual">("alfred");
   return (
@@ -39,10 +41,10 @@ export default function PlannerTabs({
       </div>
 
       {tab === "alfred" ? (
-        <MonthPlanBanner plan={plan} monthKey={monthKey} counts={counts} />
+        <MonthPlanBanner plan={plan} monthKey={monthKey} months={months} countsByMonth={countsByMonth} />
       ) : (
         <div className="sw-card px-6 py-5">
-          <ManualPlanner monthKey={monthKey} />
+          <ManualPlanner months={months} />
         </div>
       )}
     </div>

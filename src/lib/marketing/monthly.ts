@@ -6,7 +6,8 @@ export type MonthSuggestion = {
   channel: string; // linkedin | instagram | tiktok | youtube | website
   title: string; // short hook / working title
   idea: string; // one-line description of the post
-  day: number; // 1–28, day of the target month
+  day: number; // 1–28, day of the target month (fallback)
+  date?: string; // engine-assigned YYYY-MM-DD (preferred over day)
   goal?: string; // secondary goal: awareness | followers | inquiries | community
 };
 
@@ -47,4 +48,22 @@ export function dateForDay(key: string, day: number): string {
   const lastDay = new Date(y, m, 0).getDate();
   const d = Math.min(Math.max(1, Math.round(day || 1)), lastDay);
   return `${key}-${pad(d)}`;
+}
+
+/* Today as YYYY-MM-DD. */
+export function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/* Earliest date the planner may use for a month: today when planning the current
+   month (so mid-month plans start from now), otherwise the 1st (undefined floor). */
+export function floorForMonth(key: string): string | undefined {
+  const t = todayStr();
+  return key === t.slice(0, 7) ? t : undefined;
+}
+
+/* The next `n` plannable month keys starting from the current month. */
+export function horizonMonths(n = 6): string[] {
+  return Array.from({ length: n }, (_, i) => monthKey(new Date(), i));
 }

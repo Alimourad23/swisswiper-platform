@@ -6,6 +6,7 @@ import {
   addPlanItems,
   dismissMonthPlan,
   generateMonthPlanNow,
+  getMonthPlan,
   suggestMoreMonthPlan,
 } from "@/lib/marketing/monthly-actions";
 import { dateForDay, monthLabel, type MonthPlan, type MonthSuggestion } from "@/lib/marketing/monthly";
@@ -15,7 +16,7 @@ import { recommendedCount } from "@/lib/marketing/cadence";
 type Item = MonthSuggestion & { date: string; selected: boolean };
 
 function toItems(plan: MonthPlan): Item[] {
-  return plan.suggestions.map((s) => ({ ...s, date: dateForDay(plan.month, s.day), selected: true }));
+  return plan.suggestions.map((s) => ({ ...s, date: s.date ?? dateForDay(plan.month, s.day), selected: true }));
 }
 function channelName(key: string): string {
   return channels.find((c) => c.key === key)?.name ?? key;
@@ -24,36 +25,55 @@ function channelName(key: string): string {
 export default function MonthPlanBanner({
   plan: initial,
   monthKey,
-  counts,
+  months,
+  countsByMonth,
 }: {
   plan: MonthPlan | null;
-  monthKey: string;
-  counts: Record<string, number>;
+  monthKey: string; // default (current) month
+  months: string[]; // selectable horizon
+  countsByMonth: Record<string, Record<string, number>>;
 }) {
   const router = useRouter();
+  const [month, setMonth] = useState(monthKey);
   const [plan, setPlan] = useState<MonthPlan | null>(initial);
   const [items, setItems] = useState<Item[]>(initial ? toItems(initial) : []);
   const [busy, setBusy] = useState(false);
   const [added, setAdded] = useState(0);
-  const label = monthLabel(monthKey);
-  const monthMin = `${monthKey}-01`;
-  const [my, mm] = monthKey.split("-").map(Number);
-  const monthMax = `${monthKey}-${String(new Date(my, mm, 0).getDate()).padStart(2, "0")}`;
+
+  const label = monthLabel(month);
+  const counts = countsByMonth[month] ?? {};
+  const monthMin = `${month}-01`;
+  const [my, mm] = month.split("-").map(Number);
+  const monthMax = `${month}-${String(new Date(my, mm, 0).getDate()).padStart(2, "0")}`;
 
   const setItem = (i: number, patch: Partial<Item>) => setItems((arr) => arr.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const selected = items.filter((it) => it.selected);
 
+  async function switchMonth(next: string) {
+    setMonth(next);
+    setAdded(0);
+    if (next === monthKey) {
+      setPlan(initial);
+      setItems(initial ? toItems(initial) : []);
+      return;
+    }
+    setBusy(true);
+    const p = await getMonthPlan(next);
+    setPlan(p);
+    setItems(p && p.status === "suggested" ? toItems(p) : []);
+    setBusy(false);
+  }
   async function generate() {
     setBusy(true);
     setAdded(0);
-    const p = await generateMonthPlanNow(monthKey);
+    const p = await generateMonthPlanNow(month);
     setPlan(p);
     setItems(p ? toItems(p) : []);
     setBusy(false);
   }
   async function more() {
     setBusy(true);
-    const p = await suggestMoreMonthPlan(monthKey);
+    const p = await suggestMoreMonthPlan(month);
     if (p) {
       setPlan(p);
       setItems(toItems(p));
@@ -64,12 +84,11 @@ export default function MonthPlanBanner({
     if (selected.length === 0) return;
     setBusy(true);
     const r = await addPlanItems(
-      monthKey,
+      month,
       selected.map((s) => ({ title: s.title, channel: s.channel, idea: s.idea, goal: s.goal, date: s.date })),
     );
     setBusy(false);
     setAdded(r.added);
-    // drop the added ones locally
     const addedKeys = new Set(selected.map((s) => `${s.channel}|${s.title}`));
     const remaining = items.filter((it) => !addedKeys.has(`${it.channel}|${it.title}`));
     setItems(remaining);
@@ -78,35 +97,47 @@ export default function MonthPlanBanner({
   }
   async function dismiss() {
     setBusy(true);
-    await dismissMonthPlan(monthKey);
+    await dismissMonthPlan(month);
     setPlan(null);
     setItems([]);
     setBusy(false);
   }
 
-  const counter = (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
-      {channels.map((c) => {
-        const have = counts[c.key] ?? 0;
-        const rec = recommendedCount(c.key);
-        return (
-          <span key={c.key} className={have >= rec ? "text-emerald-700" : ""}>
-            {c.name} {have}/{rec}
-          </span>
-        );
-      })}
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+        {channels.map((c) => {
+          const have = counts[c.key] ?? 0;
+          const rec = recommendedCount(c.key);
+          return (
+            <span key={c.key} className={have >= rec ? "text-emerald-700" : ""}>
+              {c.name} {have}/{rec}
+            </span>
+          );
+        })}
+      </div>
+      <label className="flex items-center gap-1 text-xs text-muted">
+        Month
+        <select value={month} onChange={(e) => switchMonth(e.target.value)} className="rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1 text-ink focus:outline-none">
+          {months.map((k) => (
+            <option key={k} value={k}>
+              {monthLabel(k)}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 
   if (plan && plan.status === "suggested" && items.length > 0) {
     return (
       <div className="flex flex-col gap-2">
-        {counter}
+        {header}
         <div className="sw-card overflow-hidden border-peri-soft">
           <div className="flex items-center justify-between gap-3 border-b border-hairline bg-peri-soft/30 px-6 py-4">
             <div>
               <h3 className="text-base font-medium text-ink">✨ Alfred&apos;s plan for {label}</h3>
-              <p className="text-xs text-hint">Tick the ones you want, tweak dates, then add them.</p>
+              <p className="text-xs text-hint">Tick the ones you want, tweak dates, then add them. Fills only the open gaps.</p>
             </div>
             <button type="button" onClick={dismiss} disabled={busy} className="shrink-0 text-xs text-muted transition-colors hover:text-ink">
               Dismiss
@@ -161,7 +192,7 @@ export default function MonthPlanBanner({
 
   return (
     <div className="flex flex-col gap-2">
-      {counter}
+      {header}
       {added > 0 && (
         <p className="text-sm text-emerald-700">
           Added {added} post{added === 1 ? "" : "s"} for {label}. ✓

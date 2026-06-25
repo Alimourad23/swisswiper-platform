@@ -28,12 +28,19 @@ export async function buildMonthSuggestions(input: {
   thisMonthPosts?: RecentPost[];
   /** How many to propose (default ~7). */
   count?: number;
+  /** Per-channel gap to fill (recommended − already planned). Drives the mix. */
+  need?: Record<string, number>;
 }): Promise<MonthSuggestion[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return [];
 
   const label = monthLabel(input.monthKey);
-  const target = Math.min(12, Math.max(3, input.count ?? 7));
+  const needEntries = Object.entries(input.need ?? {}).filter(([, n]) => n > 0);
+  const needTotal = needEntries.reduce((a, [, n]) => a + n, 0);
+  const target = Math.min(12, Math.max(3, input.count ?? (needTotal > 0 ? needTotal : 7)));
+  const needLine = needEntries.length
+    ? `Fill these gaps to reach the recommended cadence: ${needEntries.map(([c, n]) => `${c} ${n} more`).join(", ")}. Weight your mix accordingly.`
+    : "";
   const planLines = [
     input.plan.goals && `Goals: ${input.plan.goals}`,
     input.plan.audience && `Audience: ${input.plan.audience}`,
@@ -58,6 +65,7 @@ export async function buildMonthSuggestions(input: {
     "Voice: refined, calm, confident; understated luxury; never discounting or hype. " +
     `Draft a content plan for ${label}: propose ${target} posts across channels (${CHANNELS.join(", ")}), ` +
     `weighted toward each channel's recommended monthly volume (${targets}) and the plan's cadence. ` +
+    (needLine ? `${needLine} ` : "") +
     "Build on recent threads — e.g. if a co-founder was just introduced, follow up with 'get to know them' content; " +
     "continue product-education and proof themes. Cover a balance of content pillars; vary formats " +
     "(story, education, behind-the-scenes, proof, founder voice). " +
