@@ -320,6 +320,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
               onToday={thisMonth}
               onMove={moveToDate}
               onOpen={setStudioId}
+              onDelete={remove}
             />
           ) : (
             <>
@@ -389,6 +390,7 @@ export default function ContentSchedule({ initialPosts }: { initialPosts: Conten
               onSched={setSched}
               onBodyChange={bodyChange}
               onBodySave={bodySave}
+              onDelete={remove}
             />
           );
         })()}

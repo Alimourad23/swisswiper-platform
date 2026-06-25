@@ -42,6 +42,7 @@ export default function MonthGrid({
   onToday,
   onMove,
   onOpen,
+  onDelete,
 }: {
   posts: ContentPost[];
   month: Date; // first day of the displayed month
@@ -50,9 +51,11 @@ export default function MonthGrid({
   onToday: () => void;
   onMove: (id: string, date: string) => void;
   onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const today = ymd(new Date());
   const monthLabel = month.toLocaleDateString([], { month: "long", year: "numeric" });
@@ -140,25 +143,70 @@ export default function MonthGrid({
                 </span>
               </div>
               <div className="flex flex-col gap-1">
-                {dayPosts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    draggable
-                    onDragStart={() => setDragId(p.id)}
-                    onDragEnd={() => {
-                      setDragId(null);
-                      setOverDay(null);
-                    }}
-                    onClick={() => onOpen(p.id)}
-                    title={`${p.title || "Untitled"} · ${channelName(p.channel)}`}
-                    className="flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] leading-tight transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: `${color(p.channel)}1A`, color: color(p.channel) }}
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color(p.channel) }} />
-                    <span className="truncate">{p.title || "Untitled"}</span>
-                  </button>
-                ))}
+                {dayPosts.map((p) => {
+                  const confirming = confirmId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      draggable={!confirming}
+                      onDragStart={() => setDragId(p.id)}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setOverDay(null);
+                      }}
+                      onClick={() => !confirming && onOpen(p.id)}
+                      title={`${p.title || "Untitled"} · ${channelName(p.channel)}`}
+                      className="group flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-left text-[11px] leading-tight"
+                      style={{
+                        backgroundColor: confirming ? "#FDE2E2" : `${color(p.channel)}1A`,
+                        color: confirming ? "#B91C1C" : color(p.channel),
+                      }}
+                    >
+                      {confirming ? (
+                        <>
+                          <span className="truncate">Delete?</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDelete(p.id);
+                              setConfirmId(null);
+                            }}
+                            className="ml-auto shrink-0 rounded px-1 font-medium hover:underline"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmId(null);
+                            }}
+                            className="shrink-0 rounded px-1 hover:underline"
+                          >
+                            No
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color(p.channel) }} />
+                          <span className="truncate">{p.title || "Untitled"}</span>
+                          <button
+                            type="button"
+                            aria-label="Delete post"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmId(p.id);
+                            }}
+                            className="ml-auto hidden shrink-0 px-0.5 leading-none opacity-60 hover:opacity-100 group-hover:block"
+                          >
+                            ✕
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -174,25 +222,70 @@ export default function MonthGrid({
           <p className="px-2 text-xs text-hint">Nothing waiting. Every idea has a date.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5 px-2">
-            {unscheduled.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                draggable
-                onDragStart={() => setDragId(p.id)}
-                onDragEnd={() => {
-                  setDragId(null);
-                  setOverDay(null);
-                }}
-                onClick={() => onOpen(p.id)}
-                title={`${p.title || "Untitled"} · ${channelName(p.channel)}`}
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-opacity hover:opacity-90"
-                style={{ backgroundColor: `${color(p.channel)}1A`, color: color(p.channel) }}
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color(p.channel) }} />
-                <span className="max-w-[12rem] truncate">{p.title || "Untitled"}</span>
-              </button>
-            ))}
+            {unscheduled.map((p) => {
+              const confirming = confirmId === p.id;
+              return (
+                <div
+                  key={p.id}
+                  draggable={!confirming}
+                  onDragStart={() => setDragId(p.id)}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setOverDay(null);
+                  }}
+                  onClick={() => !confirming && onOpen(p.id)}
+                  title={`${p.title || "Untitled"} · ${channelName(p.channel)}`}
+                  className="group flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+                  style={{
+                    backgroundColor: confirming ? "#FDE2E2" : `${color(p.channel)}1A`,
+                    color: confirming ? "#B91C1C" : color(p.channel),
+                  }}
+                >
+                  {confirming ? (
+                    <>
+                      <span>Delete?</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(p.id);
+                          setConfirmId(null);
+                        }}
+                        className="rounded px-1 font-medium hover:underline"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmId(null);
+                        }}
+                        className="rounded px-1 hover:underline"
+                      >
+                        No
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color(p.channel) }} />
+                      <span className="max-w-[12rem] truncate">{p.title || "Untitled"}</span>
+                      <button
+                        type="button"
+                        aria-label="Delete post"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmId(p.id);
+                        }}
+                        className="hidden px-0.5 leading-none opacity-60 hover:opacity-100 group-hover:block"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

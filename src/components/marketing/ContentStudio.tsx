@@ -34,6 +34,7 @@ export default function ContentStudio({
   onSched,
   onBodyChange,
   onBodySave,
+  onDelete,
 }: {
   post: ContentPost;
   onClose: () => void;
@@ -44,6 +45,7 @@ export default function ContentStudio({
   onSched: (id: string, d: string) => void;
   onBodyChange: (id: string, b: string) => void;
   onBodySave: (id: string, b: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -55,6 +57,7 @@ export default function ContentStudio({
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape; lock background scroll while open.
@@ -117,13 +120,47 @@ export default function ContentStudio({
           <span className="text-sm font-medium text-peri-deep">Content studio</span>
           <span className="truncate text-sm text-muted">{post.title || "Untitled post"}</span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 rounded-full bg-bg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
-        >
-          Close ✕
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {confirmDelete ? (
+            <>
+              <span className="text-xs text-muted">Delete this post?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete(post.id);
+                  onClose();
+                }}
+                className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-full bg-bg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-red-600"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full bg-bg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
+              >
+                Close ✕
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
