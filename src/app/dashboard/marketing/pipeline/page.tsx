@@ -1,6 +1,6 @@
 import ModuleHeader from "@/components/ModuleHeader";
 import ContentSchedule from "@/components/marketing/ContentSchedule";
-import MonthPlanBanner from "@/components/marketing/MonthPlanBanner";
+import PlannerTabs from "@/components/marketing/PlannerTabs";
 import { getModule } from "@/lib/modules";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getMonthPlan } from "@/lib/marketing/monthly-actions";
@@ -19,7 +19,7 @@ export default async function MarketingPipelinePage() {
         title="Pipeline"
         subtitle="Every post from idea to published — plan, queue and open the Studio to draft."
       />
-      <MonthPlanBanner plan={monthPlan} monthKey={key} />
+      <PlannerTabs plan={monthPlan} monthKey={key} />
       <ContentSchedule initialPosts={posts} view="list" />
     </div>
   );

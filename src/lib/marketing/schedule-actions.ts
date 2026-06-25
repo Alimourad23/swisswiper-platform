@@ -53,6 +53,30 @@ export async function createPost(input: {
   return { ok: !error, id: (data as { id?: string } | null)?.id };
 }
 
+/* Create many posts at once (used by the manual planner). Each becomes a
+   scheduled post on its assigned date. */
+export async function createPostsBulk(
+  items: { title: string; channel: string; scheduledFor: string; notes?: string }[],
+): Promise<{ ok: boolean; added: number }> {
+  const c = await uid();
+  if (!c) return { ok: false, added: 0 };
+  const rows = items
+    .filter((it) => it.title.trim())
+    .map((it) => ({
+      created_by: c.id,
+      title: it.title.trim(),
+      channel: it.channel || "linkedin",
+      status: "scheduled",
+      scheduled_for: it.scheduledFor || null,
+      notes: it.notes ?? "",
+    }));
+  if (rows.length === 0) return { ok: true, added: 0 };
+  const { error } = await c.supabase.from("content_posts").insert(rows);
+  revalidatePath("/dashboard/marketing/pipeline");
+  revalidatePath("/dashboard/marketing/calendar");
+  return { ok: !error, added: rows.length };
+}
+
 export async function updatePost(
   id: string,
   fields: { title?: string; channel?: string; status?: ContentStatus; scheduledFor?: string | null; format?: string; body?: string; notes?: string },
