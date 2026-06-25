@@ -3,10 +3,12 @@ import Link from "next/link";
 import ModuleHeader from "@/components/ModuleHeader";
 import MarketingOverviewClient from "@/components/marketing/MarketingOverviewClient";
 import WeeklyReport from "@/components/marketing/WeeklyReport";
+import AiUsageCard from "@/components/marketing/AiUsageCard";
 import { getModule } from "@/lib/modules";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getPlan } from "@/lib/marketing/plan-actions";
+import { getUsageSummary } from "@/lib/marketing/ai-usage-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +30,11 @@ export default function MarketingPage() {
 }
 
 async function MarketingData() {
-  const [{ metrics }, posts, plan] = await Promise.all([
+  const [{ metrics }, posts, plan, usage] = await Promise.all([
     getLinkedInMetrics(),
     getContentPosts(),
     getPlan(),
+    getUsageSummary(),
   ]);
   return (
     <div className="flex flex-col gap-6">
@@ -56,6 +59,7 @@ async function MarketingData() {
         </Link>
       </div>
       <WeeklyReport metrics={metrics} posts={posts} goal={plan.goals} />
+      <AiUsageCard usage={usage} />
       <MarketingOverviewClient metrics={metrics} />
     </div>
   );

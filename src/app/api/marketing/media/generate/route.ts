@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MEDIA_BUCKET } from "@/lib/marketing/media";
+import { budgetCheck, imageCost, logUsage } from "@/lib/marketing/ai-usage";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -115,6 +116,21 @@ export async function POST(req: Request) {
   const imageSize = SIZES.has(body.imageSize ?? "") ? (body.imageSize as string) : "2K";
   const count = Math.min(4, Math.max(1, Math.round(body.count ?? 1)));
 
+  // Budget guardrail: estimate this batch's cost and stop if it would exceed the cap.
+  const modelKey = body.model === "flash" ? "flash" : "pro";
+  const estCost = imageCost(modelKey, imageSize) * count;
+  const budget = await budgetCheck(estCost);
+  if (!budget.ok) {
+    return NextResponse.json(
+      {
+        error: `Monthly AI budget reached (~$${budget.spend.toFixed(2)} of $${budget.cap.toFixed(
+          0,
+        )}). A founder can raise the cap in Marketing.`,
+      },
+      { status: 402 },
+    );
+  }
+
   // Image-to-image: fetch the source image (one of our own stored media) and pass it in.
   let sourceImage: { data: string; mime: string } | undefined;
   const sourceUrl = (body.sourceUrl ?? "").trim();
@@ -178,5 +194,7 @@ export async function POST(req: Request) {
   if (created.length === 0) {
     return NextResponse.json({ error: friendlyError(lastError, lastStatus) }, { status: 502 });
   }
+  // Log the estimated spend for what we actually generated.
+  await logUsage({ kind: "image", model: modelKey, units: created.length, cost: imageCost(modelKey, imageSize) * created.length });
   return NextResponse.json({ media: created });
 }
