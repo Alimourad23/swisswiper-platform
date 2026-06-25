@@ -12,7 +12,8 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "PowerShell(Get-Process *)",
-      "PowerShell(git add *)"
+      "PowerShell(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

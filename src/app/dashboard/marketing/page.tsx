@@ -3,6 +3,7 @@ import ModuleHeader from "@/components/ModuleHeader";
 import MarketingOverviewClient from "@/components/marketing/MarketingOverviewClient";
 import ContentSchedule from "@/components/marketing/ContentSchedule";
 import MarketingPlanCard from "@/components/marketing/MarketingPlan";
+import WeeklyReport from "@/components/marketing/WeeklyReport";
 import { getModule } from "@/lib/modules";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
@@ -37,6 +38,7 @@ async function MarketingData() {
     <div className="flex flex-col gap-6">
       <MarketingPlanCard initial={plan} />
       <ContentSchedule initialPosts={posts} />
+      <WeeklyReport metrics={metrics} posts={posts} goal={plan.goals} />
       <MarketingOverviewClient metrics={metrics} />
     </div>
   );
