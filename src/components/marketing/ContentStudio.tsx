@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
-import { setInstagramPublish, publishNow } from "@/lib/marketing/schedule-actions";
+import { setInstagramPublish, publishNow, updatePost } from "@/lib/marketing/schedule-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
@@ -99,6 +99,34 @@ export default function ContentStudio({
   const chatRef = useRef<HTMLTextAreaElement>(null);
 
   const images = media.filter((m) => m.kind === "image");
+  const igVideos = media.filter((m) => m.kind === "video");
+
+  // Per-format readiness for Instagram publishing (null = ready to publish).
+  const igFormat =
+    (post.format || "").toLowerCase() ||
+    (igVideos.length && !images.length ? "reel" : images.length > 1 ? "carousel" : "post");
+  const igBlocker: string | null =
+    igFormat === "story"
+      ? images.length || igVideos.length
+        ? null
+        : "a Story needs an image or video"
+      : igFormat === "carousel"
+        ? images.length < 2
+          ? "a carousel needs at least 2 images"
+          : post.body.trim()
+            ? null
+            : "write the caption first"
+        : igFormat === "reel" || igFormat === "video"
+          ? !igVideos.length
+            ? "a Reel needs a video"
+            : post.body.trim()
+              ? null
+              : "write the caption first"
+          : !images.length && !igVideos.length
+            ? "add an image first"
+            : post.body.trim()
+              ? null
+              : "write the caption first";
 
   // Load attached media when the studio opens.
   useEffect(() => {
@@ -468,6 +496,26 @@ export default function ContentStudio({
                         Last attempt failed — {post.publish_error || "unknown error."}
                       </p>
                     )}
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <span className="font-medium text-ink">Format</span>
+                      <select
+                        value={post.format || ""}
+                        onChange={(e) => {
+                          onLocalPatch(post.id, { format: e.target.value });
+                          void updatePost(post.id, { format: e.target.value });
+                        }}
+                        className="rounded-full border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
+                      >
+                        <option value="">Auto (from media)</option>
+                        <option value="post">Feed post — 1 image</option>
+                        <option value="carousel">Carousel — 2–10 images</option>
+                        <option value="story">Story — image or video</option>
+                        <option value="reel">Reel — video</option>
+                      </select>
+                      {igFormat === "story" && (
+                        <span className="text-[11px] text-hint">Stories don&apos;t carry captions on Instagram</span>
+                      )}
+                    </div>
                     <label className="flex cursor-pointer items-start gap-2">
                       <input
                         type="checkbox"
@@ -508,14 +556,12 @@ export default function ContentStudio({
                           <button
                             type="button"
                             onClick={() => setConfirmPub(true)}
-                            disabled={!post.body.trim() || images.length === 0}
+                            disabled={Boolean(igBlocker)}
                             className="rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-peri-deep transition-colors hover:border-peri-deep disabled:opacity-50"
                           >
                             Publish to Instagram now
                           </button>
-                          {(!post.body.trim() || images.length === 0) && (
-                            <span className="text-[11px] text-hint">needs a caption and an image first</span>
-                          )}
+                          {igBlocker && <span className="text-[11px] text-hint">{igBlocker}</span>}
                           {post.publish_status === "failed" && (
                             <button
                               type="button"

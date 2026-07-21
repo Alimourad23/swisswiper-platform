@@ -192,6 +192,42 @@ export async function createVideoContainer(
   return r.id;
 }
 
+/* Step 1c — one item of a carousel (image). */
+export async function createCarouselItemContainer(igUserId: string, imageUrl: string): Promise<string> {
+  const r = await igFetch<{ id: string }>(
+    `${igUserId}/media`,
+    { image_url: imageUrl, is_carousel_item: "true" },
+    "POST",
+  );
+  return r.id;
+}
+
+/* Step 1d — the carousel itself (2–10 processed item containers). */
+export async function createCarouselContainer(
+  igUserId: string,
+  childIds: string[],
+  caption: string,
+): Promise<string> {
+  const r = await igFetch<{ id: string }>(
+    `${igUserId}/media`,
+    { media_type: "CAROUSEL", children: childIds.join(","), caption },
+    "POST",
+  );
+  return r.id;
+}
+
+/* Step 1e — a Story (image or video). Instagram ignores captions on Stories. */
+export async function createStoryContainer(
+  igUserId: string,
+  media: { imageUrl?: string; videoUrl?: string },
+): Promise<string> {
+  const params: Record<string, string> = { media_type: "STORIES" };
+  if (media.imageUrl) params.image_url = media.imageUrl;
+  else if (media.videoUrl) params.video_url = media.videoUrl;
+  const r = await igFetch<{ id: string }>(`${igUserId}/media`, params, "POST");
+  return r.id;
+}
+
 /* Between steps — poll until the container is ready (FINISHED). */
 export async function getContainerStatus(containerId: string): Promise<ContainerStatus> {
   const r = await igFetch<{ status_code?: ContainerStatus }>(containerId, {
