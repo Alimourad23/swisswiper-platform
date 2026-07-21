@@ -161,6 +161,7 @@ export const founderNav: NavItem[] = [
       { name: "Calendar", href: "/dashboard/marketing/calendar" },
       { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
       { name: "Instagram", href: "/dashboard/marketing/instagram" },
+      { name: "Engagement", href: "/dashboard/marketing/engagement" },
     ],
   },
 ];

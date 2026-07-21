@@ -302,6 +302,107 @@ export async function tryFollowerDemographics(igUserId: string): Promise<IgDemog
   }
 }
 
+/* ---- Engagement: comments + direct messages ---------------------------- */
+
+export type IgCommentReply = { id: string; text: string; username: string; timestamp: string };
+
+export type IgComment = {
+  id: string;
+  text: string;
+  username: string;
+  timestamp: string;
+  likeCount: number;
+  replies: IgCommentReply[];
+};
+
+/* Comments on one post (with their replies, so we can tell what's answered). */
+export async function getMediaComments(mediaId: string): Promise<IgComment[]> {
+  const r = await igFetch<{
+    data?: {
+      id: string;
+      text?: string;
+      username?: string;
+      timestamp?: string;
+      like_count?: number;
+      replies?: { data?: { id: string; text?: string; username?: string; timestamp?: string }[] };
+    }[];
+  }>(`${mediaId}/comments`, {
+    fields: "id,text,username,timestamp,like_count,replies{id,text,username,timestamp}",
+    limit: "25",
+  });
+  return (r.data ?? []).map((c) => ({
+    id: c.id,
+    text: c.text ?? "",
+    username: c.username ?? "",
+    timestamp: c.timestamp ?? "",
+    likeCount: c.like_count ?? 0,
+    replies: (c.replies?.data ?? []).map((x) => ({
+      id: x.id,
+      text: x.text ?? "",
+      username: x.username ?? "",
+      timestamp: x.timestamp ?? "",
+    })),
+  }));
+}
+
+/* Publish a reply under a comment. */
+export async function replyToComment(commentId: string, message: string): Promise<string> {
+  const r = await igFetch<{ id: string }>(`${commentId}/replies`, { message }, "POST");
+  return r.id;
+}
+
+export type IgMessage = { id: string; text: string; fromId: string; createdTime: string };
+
+export type IgConversation = {
+  id: string;
+  participantId: string;
+  participantUsername: string;
+  updatedTime: string;
+  messages: IgMessage[];
+};
+
+/* Recent DM conversations with their latest messages (newest first). */
+export async function getConversations(selfUserId: string): Promise<IgConversation[]> {
+  const r = await igFetch<{
+    data?: {
+      id: string;
+      updated_time?: string;
+      participants?: { data?: { id?: string; username?: string }[] };
+      messages?: { data?: { id: string; message?: string; from?: { id?: string }; created_time?: string }[] };
+    }[];
+  }>("me/conversations", {
+    platform: "instagram",
+    fields: "id,updated_time,participants,messages{id,message,from,created_time}",
+    limit: "10",
+  });
+  return (r.data ?? []).map((c) => {
+    const other = (c.participants?.data ?? []).find((p) => String(p.id) !== selfUserId);
+    return {
+      id: c.id,
+      participantId: String(other?.id ?? ""),
+      participantUsername: other?.username ?? "customer",
+      updatedTime: c.updated_time ?? "",
+      messages: (c.messages?.data ?? [])
+        .map((m) => ({
+          id: m.id,
+          text: m.message ?? "",
+          fromId: String(m.from?.id ?? ""),
+          createdTime: m.created_time ?? "",
+        }))
+        .slice(0, 12),
+    };
+  });
+}
+
+/* Send a DM (allowed within 24h of the customer's last message — Meta's rule). */
+export async function sendDirectMessage(igUserId: string, recipientId: string, text: string): Promise<void> {
+  await igFetch<{ message_id?: string }>(
+    `${igUserId}/messages`,
+    { recipient: JSON.stringify({ id: recipientId }), message: JSON.stringify({ text }) },
+    "POST",
+  );
+}
+
 /* ---- Publishing (two-step: create a media container, then publish) ---- */
 
 export type ContainerStatus = "IN_PROGRESS" | "FINISHED" | "PUBLISHED" | "ERROR" | "EXPIRED";
