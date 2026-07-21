@@ -33,7 +33,7 @@ export const channels: Channel[] = [
   {
     key: "instagram",
     name: "Instagram",
-    status: "soon",
+    status: "live",
     icon: (
       <svg {...p} aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="5" />

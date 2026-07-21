@@ -70,6 +70,93 @@ export async function getInstagramProfile(): Promise<IgProfile> {
   return { userId: String(me.user_id ?? me.id), username: me.username };
 }
 
+/* ---- Analytics (live reads; used by the marketing module) -------------- */
+
+export type IgAccountStats = {
+  userId: string;
+  username: string;
+  followersCount: number;
+  mediaCount: number;
+};
+
+/* Followers + post count straight from the account — one call. */
+export async function getInstagramAccountStats(): Promise<IgAccountStats> {
+  const me = await igFetch<{
+    user_id?: string;
+    id?: string;
+    username: string;
+    followers_count?: number;
+    media_count?: number;
+  }>("me", { fields: "user_id,username,followers_count,media_count" });
+  return {
+    userId: String(me.user_id ?? me.id),
+    username: me.username,
+    followersCount: me.followers_count ?? 0,
+    mediaCount: me.media_count ?? 0,
+  };
+}
+
+export type IgMediaItem = {
+  id: string;
+  caption: string;
+  mediaType: string; // IMAGE | VIDEO | CAROUSEL_ALBUM
+  mediaUrl: string | null;
+  thumbnailUrl: string | null;
+  permalink: string;
+  timestamp: string;
+  likeCount: number;
+  commentsCount: number;
+};
+
+/* The account's recent posts with per-post likes + comments — covers posts
+   published by the platform AND posts made directly in the Instagram app. */
+export async function getRecentMedia(limit = 24): Promise<IgMediaItem[]> {
+  const r = await igFetch<{
+    data?: {
+      id: string;
+      caption?: string;
+      media_type?: string;
+      media_url?: string;
+      thumbnail_url?: string;
+      permalink?: string;
+      timestamp?: string;
+      like_count?: number;
+      comments_count?: number;
+    }[];
+  }>("me/media", {
+    fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
+    limit: String(limit),
+  });
+  return (r.data ?? []).map((m) => ({
+    id: m.id,
+    caption: m.caption ?? "",
+    mediaType: m.media_type ?? "IMAGE",
+    mediaUrl: m.media_url ?? null,
+    thumbnailUrl: m.thumbnail_url ?? null,
+    permalink: m.permalink ?? "",
+    timestamp: m.timestamp ?? "",
+    likeCount: m.like_count ?? 0,
+    commentsCount: m.comments_count ?? 0,
+  }));
+}
+
+/* 28-day account reach — BEST-EFFORT. Account-level insights may require the
+   Facebook-login API variant; when unavailable we return null and the UI simply
+   doesn't show the card (honest, no fake zeros). */
+export async function tryAccountReach28(igUserId: string): Promise<number | null> {
+  try {
+    const r = await igFetch<{ data?: { values?: { value?: number }[] }[] }>(`${igUserId}/insights`, {
+      metric: "reach",
+      period: "days_28",
+    });
+    const vals = r.data?.[0]?.values;
+    const v = vals && vals.length ? vals[vals.length - 1]?.value : undefined;
+    return typeof v === "number" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /* ---- Publishing (two-step: create a media container, then publish) ---- */
 
 export type ContainerStatus = "IN_PROGRESS" | "FINISHED" | "PUBLISHED" | "ERROR" | "EXPIRED";

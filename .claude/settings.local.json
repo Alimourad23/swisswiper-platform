@@ -17,7 +17,8 @@
       "PowerShell(npm run *)",
       "Bash(git fetch *)",
       "Bash(npm run *)",
-      "Bash(grep -iE \"\\(sk-|api[_-]?key|secret|password|token\\).*['\\\\\"=][A-Za-z0-9_\\\\-]{20,}\")"
+      "Bash(grep -iE \"\\(sk-|api[_-]?key|secret|password|token\\).*['\\\\\"=][A-Za-z0-9_\\\\-]{20,}\")",
+      "Bash(git rev-list *)"
     ]
   }
 }

@@ -9,7 +9,15 @@ import { channels } from "@/lib/marketing/channels";
 import type { LinkedInMetrics } from "@/lib/linkedin/parse";
 import { windowAgg, popPercent, decisionMakerShare } from "@/lib/linkedin/compute";
 
-export default function MarketingOverviewClient({ metrics }: { metrics: LinkedInMetrics }) {
+export type InstagramLiteCard = { username: string; followers: number; mediaCount: number } | null;
+
+export default function MarketingOverviewClient({
+  metrics,
+  instagram = null,
+}: {
+  metrics: LinkedInMetrics;
+  instagram?: InstagramLiteCard;
+}) {
   const [days, setDays] = useState(365);
   const a = windowAgg(metrics, days);
   const dm = decisionMakerShare(metrics);
@@ -56,6 +64,26 @@ export default function MarketingOverviewClient({ metrics }: { metrics: LinkedIn
                 <Link href="/dashboard/marketing/linkedin#upload" className="text-xs font-medium text-muted hover:text-ink">
                   Update — upload export
                 </Link>
+              </div>
+            </div>
+          ) : c.key === "instagram" && instagram ? (
+            <div key={c.key} className="sw-card flex flex-col p-6">
+              <div className="flex items-center justify-between">
+                <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-control)] bg-peri-soft text-peri-deep">
+                  {c.icon}
+                </span>
+                <LivePill />
+              </div>
+              <h3 className="mt-4 text-base font-medium">Instagram</h3>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                <Mini label="Followers" value={fmt(instagram.followers)} />
+                <Mini label="Posts" value={fmt(instagram.mediaCount)} />
+              </div>
+              <div className="mt-5 flex items-center justify-between">
+                <Link href="/dashboard/marketing/instagram" className="text-sm font-medium text-peri-deep hover:underline">
+                  View details →
+                </Link>
+                <span className="text-xs text-hint">@{instagram.username}</span>
               </div>
             </div>
           ) : (

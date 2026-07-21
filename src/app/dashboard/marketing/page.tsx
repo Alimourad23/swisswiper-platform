@@ -9,6 +9,7 @@ import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getPlan } from "@/lib/marketing/plan-actions";
 import { getUsageSummary } from "@/lib/marketing/ai-usage-actions";
+import { getInstagramLite } from "@/lib/marketing/instagram-data";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default function MarketingPage() {
         icon={m.icon}
         title={m.name}
         subtitle="Executive summary and performance. Plan and Calendar live in the menu."
-        right={<span className="text-xs text-hint">1 of 5 channels connected</span>}
+        right={<span className="text-xs text-hint">Live channels: LinkedIn · Instagram</span>}
       />
       <Suspense fallback={<MetricsSkeleton />}>
         <MarketingData />
@@ -30,11 +31,12 @@ export default function MarketingPage() {
 }
 
 async function MarketingData() {
-  const [{ metrics }, posts, plan, usage] = await Promise.all([
+  const [{ metrics }, posts, plan, usage, instagram] = await Promise.all([
     getLinkedInMetrics(),
     getContentPosts(),
     getPlan(),
     getUsageSummary(),
+    getInstagramLite(),
   ]);
   return (
     <div className="flex flex-col gap-6">
@@ -60,7 +62,7 @@ async function MarketingData() {
       </div>
       <WeeklyReport metrics={metrics} posts={posts} goal={plan.goals} />
       <AiUsageCard usage={usage} />
-      <MarketingOverviewClient metrics={metrics} />
+      <MarketingOverviewClient metrics={metrics} instagram={instagram} />
     </div>
   );
 }
