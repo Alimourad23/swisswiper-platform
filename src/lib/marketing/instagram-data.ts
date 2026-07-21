@@ -2,9 +2,13 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import {
   getInstagramAccountStats,
-  getInstagramToken,
   getRecentMedia,
+  hasInstagramConnection,
+  tryAccountInsightTotals,
   tryAccountReach28,
+  tryFollowerDemographics,
+  tryMediaInsights,
+  type IgDemographics,
   type IgMediaItem,
 } from "@/lib/instagram/client";
 
@@ -17,6 +21,8 @@ import {
 
 export type IgSnapshot = { snap_date: string; followers: number };
 
+export type IgMediaWithInsights = IgMediaItem & { reach: number | null; saved: number | null };
+
 export type InstagramAnalytics =
   | { connected: false; reason: string }
   | {
@@ -24,27 +30,46 @@ export type InstagramAnalytics =
       username: string;
       followers: number;
       mediaCount: number;
-      media: IgMediaItem[];
+      media: IgMediaWithInsights[];
       totalLikes: number;
       totalComments: number;
       /** (likes + comments) / posts, across the recent media window. */
       avgEngagementPerPost: number;
-      /** 28-day account reach, or null when insights aren't available. */
+      /** 28-day account metrics — null when Instagram doesn't provide them. */
       reach28: number | null;
+      views28: number | null;
+      profileViews28: number | null;
+      accountsEngaged28: number | null;
+      /** Follower demographics by country — null until ~100 followers. */
+      demographics: IgDemographics;
       /** Daily follower history (oldest → newest), built from page views. */
       snapshots: IgSnapshot[];
     };
 
+/* Per-post insights are fetched for this many recent posts (1 API call each). */
+const MEDIA_INSIGHTS_LIMIT = 12;
+
 export async function getInstagramAnalytics(): Promise<InstagramAnalytics> {
-  if (!getInstagramToken()) {
+  if (!(await hasInstagramConnection())) {
     return {
       connected: false,
-      reason: "Instagram isn't connected yet — the access token is missing from the environment.",
+      reason: "Instagram isn't connected yet — use Connect Instagram below, or set the access token.",
     };
   }
   try {
     const stats = await getInstagramAccountStats();
-    const [media, reach28] = await Promise.all([getRecentMedia(24), tryAccountReach28(stats.userId)]);
+    const [mediaRaw, reach28, totals, demographics] = await Promise.all([
+      getRecentMedia(24),
+      tryAccountReach28(stats.userId),
+      tryAccountInsightTotals(stats.userId),
+      tryFollowerDemographics(stats.userId),
+    ]);
+
+    const media: IgMediaWithInsights[] = await Promise.all(
+      mediaRaw.map(async (m, i) =>
+        i < MEDIA_INSIGHTS_LIMIT ? { ...m, ...(await tryMediaInsights(m.id)) } : { ...m, reach: null, saved: null },
+      ),
+    );
 
     const totalLikes = media.reduce((n, m) => n + m.likeCount, 0);
     const totalComments = media.reduce((n, m) => n + m.commentsCount, 0);
@@ -69,6 +94,10 @@ export async function getInstagramAnalytics(): Promise<InstagramAnalytics> {
       totalComments,
       avgEngagementPerPost,
       reach28,
+      views28: totals.views,
+      profileViews28: totals.profileViews,
+      accountsEngaged28: totals.accountsEngaged,
+      demographics,
       snapshots,
     };
   } catch (e) {
@@ -116,7 +145,7 @@ async function recordAndReadSnapshots(row: {
 export type IgLite = { username: string; followers: number; mediaCount: number } | null;
 
 export async function getInstagramLite(): Promise<IgLite> {
-  if (!getInstagramToken()) return null;
+  if (!(await hasInstagramConnection())) return null;
   try {
     const s = await getInstagramAccountStats();
     return { username: s.username, followers: s.followersCount, mediaCount: s.mediaCount };

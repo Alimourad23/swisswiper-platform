@@ -26,6 +26,8 @@ export type ContentPost = {
   source?: string | null;
   /** Instagram auto-publish: per-post opt-in; the daily cron publishes due posts. */
   auto_publish?: boolean;
+  /** Optional per-post publish moment (ISO); null = whenever the publish run fires that day. */
+  publish_at?: string | null;
   /** null | publishing | published | failed */
   publish_status?: string | null;
   published_at?: string | null;

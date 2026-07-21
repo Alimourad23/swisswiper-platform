@@ -105,6 +105,13 @@ export default function ContentStudio({
   const igFormat =
     (post.format || "").toLowerCase() ||
     (igVideos.length && !images.length ? "reel" : images.length > 1 ? "carousel" : "post");
+  const igPublishTime = post.publish_at
+    ? (() => {
+        const d = new Date(post.publish_at as string);
+        const p2 = (n: number) => String(n).padStart(2, "0");
+        return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+      })()
+    : "11:30";
   const igBlocker: string | null =
     igFormat === "story"
       ? images.length || igVideos.length
@@ -528,10 +535,33 @@ export default function ContentStudio({
                       />
                       <span className="text-xs text-muted">
                         <span className="font-medium text-ink">Auto-publish to Instagram</span> — goes live late
-                        morning on the scheduled day. Needs the caption written, an image attached, and a scheduled
-                        date.
+                        morning on the scheduled day. Needs the caption written, the format&apos;s media attached,
+                        and a scheduled date.
                       </span>
                     </label>
+                    {Boolean(post.auto_publish) && (
+                      <label className="flex items-center gap-2 pl-6 text-xs text-muted">
+                        at
+                        <input
+                          type="time"
+                          value={igPublishTime}
+                          disabled={!post.scheduled_for}
+                          onChange={(e) => {
+                            const t = e.target.value || "11:30";
+                            if (!post.scheduled_for) return;
+                            const iso = new Date(`${post.scheduled_for}T${t}`).toISOString();
+                            onLocalPatch(post.id, { publish_at: iso });
+                            void setInstagramPublish(post.id, { publishAt: iso });
+                          }}
+                          className="rounded-full border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
+                        />
+                        <span className="text-[11px] text-hint">
+                          {post.scheduled_for
+                            ? "earliest publish moment on the scheduled day"
+                            : "set a date first"}
+                        </span>
+                      </label>
+                    )}
                     <div className="flex flex-wrap items-center gap-2">
                       {confirmPub ? (
                         <>

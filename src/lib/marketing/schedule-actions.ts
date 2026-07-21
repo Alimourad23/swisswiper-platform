@@ -127,12 +127,13 @@ export async function deletePost(id: string): Promise<{ ok: boolean }> {
    attempt so the post becomes due again at the next publish run. */
 export async function setInstagramPublish(
   id: string,
-  input: { autoPublish?: boolean; reset?: boolean },
+  input: { autoPublish?: boolean; reset?: boolean; publishAt?: string | null },
 ): Promise<{ ok: boolean }> {
   const c = await uid();
   if (!c) return { ok: false };
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.autoPublish !== undefined) patch.auto_publish = input.autoPublish;
+  if (input.publishAt !== undefined) patch.publish_at = input.publishAt;
   if (input.reset) {
     patch.publish_status = null;
     patch.publish_error = null;

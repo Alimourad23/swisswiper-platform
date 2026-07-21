@@ -18,7 +18,9 @@
       "Bash(git fetch *)",
       "Bash(npm run *)",
       "Bash(grep -iE \"\\(sk-|api[_-]?key|secret|password|token\\).*['\\\\\"=][A-Za-z0-9_\\\\-]{20,}\")",
-      "Bash(git rev-list *)"
+      "Bash(git rev-list *)",
+      "Bash(git remote *)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

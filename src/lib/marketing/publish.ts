@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { emailTemplate, sendEmail } from "@/lib/notifications";
 import {
   createCarouselContainer,
   createCarouselItemContainer,
@@ -40,7 +41,7 @@ const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 
 export async function publishDueInstagramPosts(
   admin: SupabaseClient,
-): Promise<{ due: number; published: number; failed: number; results: { id: string; ok: boolean; note: string }[] }> {
+): Promise<{ due: number; published: number; failed: number; results: { id: string; title: string; ok: boolean; note: string }[] }> {
   const today = new Date();
   const windowStart = new Date(today.getTime() - 2 * 86_400_000);
 
@@ -52,11 +53,12 @@ export async function publishDueInstagramPosts(
     .eq("auto_publish", true)
     .is("publish_status", null)
     .gte("scheduled_for", dateStr(windowStart))
-    .lte("scheduled_for", dateStr(today));
+    .lte("scheduled_for", dateStr(today))
+    .or(`publish_at.is.null,publish_at.lte.${today.toISOString()}`);
   if (error) throw new Error(error.message);
 
   const due = (dueRows ?? []) as DuePost[];
-  const results: { id: string; ok: boolean; note: string }[] = [];
+  const results: { id: string; title: string; ok: boolean; note: string }[] = [];
   if (due.length === 0) return { due: 0, published: 0, failed: 0, results };
 
   // One profile lookup serves every post this run.
@@ -73,7 +75,7 @@ export async function publishDueInstagramPosts(
         .update({ publish_status: "failed", publish_error: note })
         .eq("id", p.id)
         .is("publish_status", null);
-      results.push({ id: p.id, ok: false, note });
+      results.push({ id: p.id, title: p.title, ok: false, note });
     }
     return { due: due.length, published: 0, failed: due.length, results };
   }
@@ -90,7 +92,7 @@ export async function publishDueInstagramPosts(
       .is("publish_status", null)
       .select("id");
     if (!claimed || claimed.length === 0) {
-      results.push({ id: post.id, ok: false, note: "Already being published by another run." });
+      results.push({ id: post.id, title: post.title, ok: false, note: "Already being published by another run." });
       continue;
     }
 
@@ -110,7 +112,7 @@ export async function publishDueInstagramPosts(
         })
         .eq("id", post.id);
       published++;
-      results.push({ id: post.id, ok: true, note: permalink ?? mediaId });
+      results.push({ id: post.id, title: post.title, ok: true, note: permalink ?? mediaId });
     } catch (e) {
       const note = e instanceof Error ? e.message : "Publishing failed.";
       await admin
@@ -118,8 +120,26 @@ export async function publishDueInstagramPosts(
         .update({ publish_status: "failed", publish_error: note })
         .eq("id", post.id);
       failed++;
-      results.push({ id: post.id, ok: false, note });
+      results.push({ id: post.id, title: post.title, ok: false, note });
     }
+  }
+
+  // One summary email to the shared marketing inbox per run with outcomes.
+  if (published + failed > 0) {
+    const lines = results
+      .filter((r) => r.ok || r.note !== "Already being published by another run.")
+      .map((r) => `${r.ok ? "Published" : "Failed"} — ${r.title}${r.ok ? "" : `: ${r.note}`}`);
+    await sendEmail(
+      "marketing@swisswiper.com",
+      `Instagram publishing: ${published} published${failed ? `, ${failed} failed` : ""}`,
+      emailTemplate({
+        heading: "Instagram publishing",
+        body: `Today's run: ${published} published${failed ? `, ${failed} failed` : ""}.`,
+        lines,
+        link: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/marketing/pipeline`,
+        linkLabel: "Open the pipeline",
+      }),
+    ).catch(() => {});
   }
 
   return { due: due.length, published, failed, results };

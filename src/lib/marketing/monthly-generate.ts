@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { monthLabel, type MonthSuggestion } from "@/lib/marketing/monthly";
 import { recommendedCount, CADENCE } from "@/lib/marketing/cadence";
+import { getPerformanceBrief } from "@/lib/marketing/performance-brief";
 
 /* Ask Alfred to draft a month's content plan from the marketing plan + recent
    posts. Returns a list of suggested posts (channel/title/idea/day/goal). Used by
@@ -33,6 +34,9 @@ export async function buildMonthSuggestions(input: {
 }): Promise<MonthSuggestion[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return [];
+
+  // The feedback loop: what actually performed recently (best-effort).
+  const performance = await getPerformanceBrief().catch(() => "");
 
   const label = monthLabel(input.monthKey);
   const needEntries = Object.entries(input.need ?? {}).filter(([, n]) => n > 0);
@@ -70,6 +74,9 @@ export async function buildMonthSuggestions(input: {
     "continue product-education and proof themes. Cover a balance of content pillars; vary formats " +
     "(story, education, behind-the-scenes, proof, founder voice). " +
     "CRITICAL: do NOT duplicate or closely repeat any post in 'Recent posts' or 'Already planned this month' — keep the calendar fresh and consistent. " +
+    (performance
+      ? "LEARN FROM PERFORMANCE: the user message includes real recent performance data. Weight your suggestions toward the themes and formats that measurably performed best, while keeping enough variety to keep testing. "
+      : "") +
     `Tie each post to a secondary goal from: ${GOALS.join(", ")}.\n\n` +
     "Each post: a short working title (a hook, not a sentence), a one-line idea, the channel, a day of the month (1–28), and the goal.\n\n" +
     "Respond ONLY with a JSON array, no prose, no markdown:\n" +
@@ -79,7 +86,8 @@ export async function buildMonthSuggestions(input: {
     `Month: ${label}.\n\n` +
     `Marketing plan:\n${planLines || "(not filled in yet — use sensible defaults for a luxury glass-care brand)"}\n\n` +
     `Recent posts (build on these, never repeat):\n${recent || "(none yet)"}\n\n` +
-    `Already planned this month (avoid these, fill the gaps):\n${already || "(none yet)"}`;
+    `Already planned this month (avoid these, fill the gaps):\n${already || "(none yet)"}` +
+    (performance ? `\n\nWhat has actually performed recently:\n${performance}` : "");
 
   try {
     const client = new Anthropic({ apiKey });

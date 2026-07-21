@@ -37,16 +37,24 @@ async function InstagramData() {
 
   if (!data.connected) {
     return (
-      <div className="sw-card flex flex-col items-start gap-2 p-6">
+      <div className="sw-card flex flex-col items-start gap-3 p-6">
         <h3 className="text-base font-medium">Instagram isn&apos;t reachable right now</h3>
         <p className="text-sm text-muted">{data.reason}</p>
+        <a
+          href="/api/instagram/connect"
+          className="rounded-full bg-peri-deep px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#4d5793]"
+        >
+          Connect Instagram →
+        </a>
         <p className="text-xs text-hint">
-          If this mentions an expired or invalid token: regenerate it in the Meta dashboard (API setup with
-          Instagram login → Generate token) and update INSTAGRAM_ACCESS_TOKEN in Vercel, then redeploy.
+          Signs into the @swisswiper account and stores a self-refreshing connection — no more manual token
+          renewals. (Requires the redirect link to be registered once in the Meta dashboard.)
         </p>
       </div>
     );
   }
+
+  const insightRow = data.views28 !== null || data.profileViews28 !== null || data.accountsEngaged28 !== null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,18 +77,23 @@ async function InstagramData() {
         )}
       </section>
 
-      {data.reach28 === null && (
-        <p className="-mt-2 text-xs text-hint">
-          Reach &amp; impressions aren&apos;t available with the current Instagram connection — followers and
-          per-post engagement are live. (Deeper insights are a planned upgrade.)
-        </p>
+      {insightRow && (
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {data.views28 !== null && <Kpi label="Views (28 days)" value={fmt(data.views28)} />}
+          {data.profileViews28 !== null && <Kpi label="Profile visits (28 days)" value={fmt(data.profileViews28)} />}
+          {data.accountsEngaged28 !== null && (
+            <Kpi label="Accounts engaged (28 days)" value={fmt(data.accountsEngaged28)} />
+          )}
+        </section>
       )}
 
       {/* Recent posts */}
       <div className="sw-card">
         <div className="border-b border-hairline px-6 py-4">
           <h3 className="text-base font-medium">Recent posts</h3>
-          <p className="text-xs text-hint">Likes and comments straight from Instagram — includes posts made outside the platform.</p>
+          <p className="text-xs text-hint">
+            Likes, comments, reach and saves straight from Instagram — includes posts made outside the platform.
+          </p>
         </div>
         {data.media.length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-muted">
@@ -105,10 +118,13 @@ async function InstagramData() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-ink">{m.caption || <span className="text-hint">No caption</span>}</p>
                   <p className="mt-1 text-xs text-hint">
-                    {fmtDate(m.timestamp)} · {m.mediaType === "VIDEO" ? "Reel" : m.mediaType === "CAROUSEL_ALBUM" ? "Carousel" : "Post"}
+                    {fmtDate(m.timestamp)} ·{" "}
+                    {m.mediaType === "VIDEO" ? "Reel" : m.mediaType === "CAROUSEL_ALBUM" ? "Carousel" : "Post"}
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     ♥ {fmt(m.likeCount)} · 💬 {fmt(m.commentsCount)}
+                    {m.reach !== null && <> · reach {fmt(m.reach)}</>}
+                    {m.saved !== null && m.saved > 0 && <> · saved {fmt(m.saved)}</>}
                   </p>
                 </div>
                 {m.permalink && (
@@ -127,9 +143,34 @@ async function InstagramData() {
         )}
       </div>
 
-      <p className="text-xs text-hint">
-        A follower snapshot is saved each day this page is viewed — the growth story builds from today onward.
-      </p>
+      {/* Follower demographics */}
+      <div className="sw-card p-6">
+        <h3 className="text-base font-medium">Follower demographics</h3>
+        {data.demographics ? (
+          <ul className="mt-3 flex flex-col gap-1.5">
+            {data.demographics.entries.map((e) => (
+              <li key={e.name} className="flex items-center justify-between text-sm">
+                <span className="text-muted">{e.name}</span>
+                <span className="font-medium text-ink">{fmt(e.value)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-muted">
+            Instagram unlocks follower demographics once the account passes ~100 followers — they&apos;ll appear
+            here automatically.
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-hint">
+          A follower snapshot is saved each day this page is viewed — the growth story builds from today onward.
+        </p>
+        <a href="/api/instagram/connect" className="text-xs font-medium text-peri-deep hover:underline">
+          Reconnect Instagram
+        </a>
+      </div>
     </div>
   );
 }
