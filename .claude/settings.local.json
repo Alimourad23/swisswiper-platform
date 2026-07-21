@@ -14,7 +14,10 @@
       "PowerShell(Get-Process *)",
       "PowerShell(git add *)",
       "Bash(git commit *)",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "Bash(git fetch *)",
+      "Bash(npm run *)",
+      "Bash(grep -iE \"\\(sk-|api[_-]?key|secret|password|token\\).*['\\\\\"=][A-Za-z0-9_\\\\-]{20,}\")"
     ]
   }
 }

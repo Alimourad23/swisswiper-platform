@@ -24,6 +24,17 @@ export type ContentPost = {
   goal?: string | null;
   /** Where the post came from: manual | alfred. */
   source?: string | null;
+  /** Instagram auto-publish: per-post opt-in; the daily cron publishes due posts. */
+  auto_publish?: boolean;
+  /** null | publishing | published | failed */
+  publish_status?: string | null;
+  published_at?: string | null;
+  /** Instagram media id of the live post. */
+  external_post_id?: string | null;
+  /** Public link to the live post. */
+  external_permalink?: string | null;
+  /** Friendly error when publish_status = 'failed'. */
+  publish_error?: string | null;
 };
 
 export const CONTENT_STATUSES: { key: ContentStatus; label: string }[] = [

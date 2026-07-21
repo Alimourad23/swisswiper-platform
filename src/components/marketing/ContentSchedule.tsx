@@ -353,6 +353,7 @@ export default function ContentSchedule({
               onBodyChange={bodyChange}
               onBodySave={bodySave}
               onDelete={remove}
+              onLocalPatch={patch}
               isFounder={isFounder}
             />
           );

@@ -12,6 +12,8 @@ import { dateInputToIso } from "@/lib/tasks/format";
 import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types";
 import ActionPanel, { type PanelOption } from "@/components/bridge/ActionPanel";
 import TaskReview, { type TaskDraft } from "@/components/bridge/TaskReview";
+import PostReview, { type PostDraft } from "@/components/bridge/PostReview";
+import { createPost } from "@/lib/marketing/schedule-actions";
 import EmailReview, { type EmailDraftState } from "@/components/bridge/EmailReview";
 import EventReview, {
   type EventDraftState,
@@ -135,6 +137,7 @@ export default function AlfredChat({
   const [emailDraft, setEmailDraft] = useState<EmailDraftState | null>(null);
   const [eventDraft, setEventDraft] = useState<EventDraftState | null>(null);
   const [dayPlan, setDayPlan] = useState<DayPlanDraft | null>(null);
+  const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
   const [roster, setRoster] = useState<Person[]>([]);
   const [canFounders, setCanFounders] = useState(false);
 
@@ -147,6 +150,7 @@ export default function AlfredChat({
   const emailRefState = useRef<EmailDraftState | null>(null);
   const eventRefState = useRef<EventDraftState | null>(null);
   const dayPlanRef = useRef<DayPlanDraft | null>(null);
+  const postRef = useRef<PostDraft | null>(null);
   const rosterRef = useRef<Person[]>([]);
   const timeZone = useRef("UTC");
   const activeRef = useRef(active);
@@ -161,7 +165,7 @@ export default function AlfredChat({
   const endConversationRef = useRef<(() => void) | null>(null);
   const startListeningRef = useRef<(() => void) | null>(null);
 
-  const panelOpen = !!(taskDraft || emailDraft || eventDraft || dayPlan || confirm);
+  const panelOpen = !!(taskDraft || emailDraft || eventDraft || dayPlan || postDraft || confirm);
 
   const hasPending = useCallback(
     () =>
@@ -170,6 +174,7 @@ export default function AlfredChat({
         emailRefState.current ||
         eventRefState.current ||
         dayPlanRef.current ||
+        postRef.current ||
         confirmRef.current
       ),
     [],
@@ -220,11 +225,13 @@ export default function AlfredChat({
     emailRefState.current = null;
     eventRefState.current = null;
     dayPlanRef.current = null;
+    postRef.current = null;
     confirmRef.current = null;
     setTaskDraft(null);
     setEmailDraft(null);
     setEventDraft(null);
     setDayPlan(null);
+    setPostDraft(null);
     setConfirm(null);
   }, []);
 
@@ -309,6 +316,9 @@ export default function AlfredChat({
             } else if (built.dayPlan) {
               dayPlanRef.current = built.dayPlan;
               setDayPlan(built.dayPlan);
+            } else if (built.post) {
+              postRef.current = built.post;
+              setPostDraft(built.post);
             } else if (built.confirm) {
               confirmRef.current = built.confirm;
               setConfirm(built.confirm);
@@ -345,6 +355,7 @@ export default function AlfredChat({
         task: taskRef.current,
         email: emailRefState.current,
         event: eventRefState.current,
+        post: postRef.current,
         confirm: confirmRef.current?.description ?? null,
       });
       void send(msg);
@@ -535,6 +546,45 @@ export default function AlfredChat({
     }
   }, [stopRecForAction, finishWithResult]);
 
+  const submitPost = useCallback(async () => {
+    const d = postRef.current;
+    if (!d) return;
+    if (!d.title.trim()) return speakLine("It will need a topic first.", resumeListening);
+    stopRecForAction();
+    postRef.current = null;
+    setPostDraft(null);
+    setBusy(true);
+    try {
+      const r = await createPost({
+        title: d.title.trim(),
+        channel: d.channel,
+        scheduledFor: d.date || null,
+        seedIdea: d.seedIdea.trim() || undefined,
+        goal: d.goal || undefined,
+        source: "alfred",
+      });
+      if (r.ok) {
+        finishWithResult(
+          `Done — “${d.title.trim()}” is in the marketing pipeline${
+            d.date ? "" : " as an undated idea"
+          }. Open it in the Studio and I'll draft the caption. Shall I take you there?`,
+          {
+            description: "Open the marketing pipeline now?",
+            run: async () => {
+              router.push("/dashboard/marketing/pipeline");
+              onDismiss?.();
+              return "";
+            },
+          },
+        );
+      } else {
+        finishWithResult("I couldn't plan that post, I'm afraid.");
+      }
+    } catch {
+      finishWithResult("I couldn't plan that post, I'm afraid.");
+    }
+  }, [speakLine, resumeListening, stopRecForAction, finishWithResult, router, onDismiss]);
+
   const cancelPending = useCallback(() => {
     stopRecForAction();
     clearPendings();
@@ -564,7 +614,7 @@ export default function AlfredChat({
   }, [stopRecForAction, finishWithResult]);
 
   const triggerRevise = useCallback(() => {
-    if (!(taskRef.current || emailRefState.current || eventRefState.current || dayPlanRef.current)) return;
+    if (!(taskRef.current || emailRefState.current || eventRefState.current || dayPlanRef.current || postRef.current)) return;
     stopRecForAction();
     speakLine("Of course — what would you like to change?", resumeListening);
   }, [stopRecForAction, speakLine, resumeListening]);
@@ -613,12 +663,16 @@ export default function AlfredChat({
         if (shortCmd && (AFFIRM.test(t) || /\bset (the )?day\b|\bset it\b/.test(t))) return void submitDayPlan();
         return freeForm(text);
       }
+      if (postRef.current) {
+        if (shortCmd && AFFIRM.test(t)) return void submitPost();
+        return freeForm(text);
+      }
       if (confirmRef.current) {
         if (shortCmd && AFFIRM.test(t)) return void doConfirm();
         return freeForm(text);
       }
     },
-    [triggerRevise, cancelPending, submitEmailSend, submitEmailDraft, submitTask, submitEvent, submitDayPlan, doConfirm, freeForm],
+    [triggerRevise, cancelPending, submitEmailSend, submitEmailDraft, submitTask, submitEvent, submitDayPlan, submitPost, doConfirm, freeForm],
   );
 
   /* ── Listening loop ───────────────────────────────────────────────────── */
@@ -834,6 +888,11 @@ export default function AlfredChat({
     { label: "Revise", kind: "ghost", onClick: triggerRevise },
     { label: "Cancel", kind: "ghost", onClick: cancelPending },
   ];
+  const postOptions: PanelOption[] = [
+    { label: "Create", kind: "primary", onClick: () => void submitPost() },
+    { label: "Revise", kind: "ghost", onClick: triggerRevise },
+    { label: "Cancel", kind: "ghost", onClick: cancelPending },
+  ];
   const confirmOptions: PanelOption[] = [
     { label: "Confirm", kind: confirm?.danger ? "danger" : "primary", onClick: () => void doConfirm() },
     { label: "Cancel", kind: "ghost", onClick: cancelPending },
@@ -934,6 +993,22 @@ export default function AlfredChat({
         </ActionPanel>
       )}
 
+      {postDraft && (
+        <ActionPanel title="New marketing post — review" say="Create · Revise · Cancel" options={postOptions} busy={busy}>
+          <PostReview
+            draft={postDraft}
+            onChange={(patch) =>
+              setPostDraft((d) => {
+                if (!d) return d;
+                const nd = { ...d, ...patch };
+                postRef.current = nd;
+                return nd;
+              })
+            }
+          />
+        </ActionPanel>
+      )}
+
       {confirm && (
         <ActionPanel title="Please confirm" say="Confirm · Cancel" options={confirmOptions} busy={busy}>
           <p className="text-sm font-light leading-relaxed text-[#eef1f8]">{confirm.description}</p>
@@ -973,6 +1048,7 @@ type Interpretation = {
   email?: EmailDraftState;
   event?: EventDraftState;
   dayPlan?: DayPlanDraft;
+  post?: PostDraft;
   confirm?: Confirm;
   spoken?: string;
   error?: string;
@@ -985,6 +1061,8 @@ function interpret(act: ActionCall, dir: Directory): Interpretation {
       return interpretPlanDay(input, dir);
     case "create_task":
       return interpretTask(input, dir);
+    case "create_post":
+      return interpretPost(input);
     case "set_task_status":
       return interpretStatus(input, dir);
     case "draft_reply":
@@ -1037,6 +1115,28 @@ function interpretTask(input: Record<string, unknown>, dir: Directory): Interpre
   if (unresolved.length) spoken += ` I couldn't place ${joinNames(unresolved)}.`;
   spoken += " Say create, revise, or cancel.";
   return { task: { title, assigneeIds, due, priority, visibility }, spoken };
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  linkedin: "LinkedIn",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  website: "website",
+};
+
+function interpretPost(input: Record<string, unknown>): Interpretation {
+  const title = String(input.title ?? "").trim();
+  if (!title) return { error: "I didn't catch the post topic — could you say it again?" };
+  const channel = oneOf(input.channel, ["linkedin", "instagram", "tiktok", "youtube", "website"], "instagram");
+  const date = toDateInput(input.date ? String(input.date).trim() : "");
+  const seedIdea = String(input.seedIdea ?? "").trim();
+  const goal = oneOf(input.goal, ["awareness", "followers", "inquiries", "community", ""], "");
+  const dateLabel = date ? prettyDate(dateInputToIso(date) ?? "") : "";
+  const spoken = `I've planned a ${CHANNEL_LABELS[channel] ?? channel} post: ${title}${
+    dateLabel ? `, for ${dateLabel}` : ", undated for now"
+  }. The caption gets drafted in the Studio. Say create, revise, or cancel.`;
+  return { post: { title, channel, date, seedIdea, goal }, spoken };
 }
 
 function planDayDate(): string {
@@ -1350,7 +1450,7 @@ function interpretAddAttendees(input: Record<string, unknown>, dir: Directory): 
 function buildPendingMessage(
   utterance: string,
   roster: Person[],
-  pend: { task: TaskDraft | null; email: EmailDraftState | null; event: EventDraftState | null; confirm: string | null },
+  pend: { task: TaskDraft | null; email: EmailDraftState | null; event: EventDraftState | null; post: PostDraft | null; confirm: string | null },
 ): string {
   const u = utterance.trim();
   if (pend.task) {
@@ -1372,6 +1472,12 @@ function buildPendingMessage(
     return `I'm reviewing a ${v.mode === "reschedule" ? "reschedule" : "draft event"} — title: "${v.title}"; start: ${
       v.start
     }; end: ${v.end}; attendees: ${v.attendees || "none"}. I said: "${u}". If that's an edit, re-propose it with the right calendar tool. Otherwise just answer me.`;
+  }
+  if (pend.post) {
+    const p = pend.post;
+    return `I'm reviewing a draft marketing post — title: "${p.title}"; channel: ${p.channel}; date: ${
+      p.date || "none"
+    }; idea brief: "${p.seedIdea || "none"}"; goal: ${p.goal || "none"}. I said: "${u}". If that's an edit, re-propose the post with create_post applying it and KEEPING the other fields. Otherwise just answer me.`;
   }
   if (pend.confirm) {
     return `I'm reviewing this proposal: "${pend.confirm}". I said: "${u}". If that changes it, re-propose with the right tool. Otherwise just answer me.`;

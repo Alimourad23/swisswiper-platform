@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
+import { setInstagramPublish } from "@/lib/marketing/schedule-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
@@ -43,6 +44,7 @@ export default function ContentStudio({
   onBodyChange,
   onBodySave,
   onDelete,
+  onLocalPatch,
   isFounder = false,
 }: {
   post: ContentPost;
@@ -55,6 +57,7 @@ export default function ContentStudio({
   onBodyChange: (id: string, b: string) => void;
   onBodySave: (id: string, b: string) => void;
   onDelete: (id: string) => void;
+  onLocalPatch: (id: string, p: Partial<ContentPost>) => void;
   isFounder?: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>([
@@ -411,6 +414,62 @@ export default function ContentStudio({
                   ? "📅 On your Google Calendar — planning, drafting & publish-day reminders are set."
                   : "📅 Scheduling adds planning, drafting & publish-day reminders to your Google Calendar."}
               </p>
+            )}
+
+            {/* Instagram auto-publish */}
+            {post.channel === "instagram" && (
+              <div className="rounded-[var(--radius-control)] border border-hairline bg-bg px-4 py-3">
+                {post.publish_status === "published" ? (
+                  <p className="text-xs text-emerald-700">
+                    Published to Instagram
+                    {post.external_permalink && (
+                      <>
+                        {" · "}
+                        <a
+                          href={post.external_permalink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium underline"
+                        >
+                          View the live post ↗
+                        </a>
+                      </>
+                    )}
+                  </p>
+                ) : post.publish_status === "failed" ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs text-red-600">Auto-publish failed — {post.publish_error || "unknown error."}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onLocalPatch(post.id, { publish_status: null, publish_error: null });
+                        void setInstagramPublish(post.id, { reset: true });
+                      }}
+                      className="self-start rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
+                    >
+                      Clear — retry at the next publish run
+                    </button>
+                  </div>
+                ) : post.publish_status === "publishing" ? (
+                  <p className="text-xs text-peri-deep">Publishing to Instagram…</p>
+                ) : (
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(post.auto_publish)}
+                      onChange={(e) => {
+                        onLocalPatch(post.id, { auto_publish: e.target.checked });
+                        void setInstagramPublish(post.id, { autoPublish: e.target.checked });
+                      }}
+                      className="mt-0.5 accent-[#5C66A6]"
+                    />
+                    <span className="text-xs text-muted">
+                      <span className="font-medium text-ink">Auto-publish to Instagram</span> — goes live late morning on
+                      the scheduled day. Needs the caption written, an image attached, and a scheduled date.
+                    </span>
+                  </label>
+                )}
+              </div>
             )}
 
             <textarea

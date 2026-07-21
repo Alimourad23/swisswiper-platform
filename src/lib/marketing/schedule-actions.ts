@@ -32,6 +32,11 @@ export async function createPost(input: {
   status?: ContentStatus;
   scheduledFor?: string | null;
   format?: string;
+  /** One-line creative brief — the Studio auto-drafts the caption from it. */
+  seedIdea?: string;
+  goal?: string;
+  /** Where the post came from: manual | alfred. */
+  source?: string;
 }): Promise<{ ok: boolean; id?: string }> {
   const c = await uid();
   if (!c) return { ok: false };
@@ -46,6 +51,9 @@ export async function createPost(input: {
       status: input.status ?? (input.scheduledFor ? "scheduled" : "idea"),
       scheduled_for: input.scheduledFor ?? null,
       format: input.format ?? "",
+      seed_idea: input.seedIdea ?? null,
+      goal: input.goal ?? null,
+      source: input.source ?? "manual",
     })
     .select("id")
     .single();
@@ -112,5 +120,24 @@ export async function deletePost(id: string): Promise<{ ok: boolean }> {
   if (!c) return { ok: false };
   const { error } = await c.supabase.from("content_posts").delete().eq("id", id);
   revalidatePath("/dashboard/marketing");
+  return { ok: !error };
+}
+
+/* Instagram auto-publish controls (per-post opt-in). `reset` clears a failed
+   attempt so the post becomes due again at the next publish run. */
+export async function setInstagramPublish(
+  id: string,
+  input: { autoPublish?: boolean; reset?: boolean },
+): Promise<{ ok: boolean }> {
+  const c = await uid();
+  if (!c) return { ok: false };
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.autoPublish !== undefined) patch.auto_publish = input.autoPublish;
+  if (input.reset) {
+    patch.publish_status = null;
+    patch.publish_error = null;
+  }
+  const { error } = await c.supabase.from("content_posts").update(patch).eq("id", id);
+  revalidatePath("/dashboard/marketing/pipeline");
   return { ok: !error };
 }
