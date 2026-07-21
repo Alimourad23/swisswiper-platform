@@ -133,6 +133,20 @@ Progress this session: ran the full critical audit → `ASSESSMENT.md`. Parked #
 - Studio: per-post "Auto-publish to Instagram" switch (off by default) + published-link / failed-error states.
 - Alfred voice: `create_post` tool + PostReview panel — "Alfred, plan an Instagram post about X for Friday" → review → confirm → pipeline (seed_idea auto-drafts the caption in the Studio).
 
+**End-of-session status (21 July, evening): ALL PHASES BUILT + DEPLOYED (except the last push).**
+Shipped and live: publishing engine (feed post / carousel / Story / Reel, format-aware, Publish-now button with confirm, per-post publish times), Alfred voice `create_post`, live analytics page (`/marketing/instagram`: followers, per-post likes/comments/reach/saves, views/profile-visits/accounts-engaged 28d, demographics-at-100-followers, daily snapshots), feedback loop (performance brief injected into the monthly planner), publish-run summary emails to marketing@, Reconnect Instagram OAuth routes + self-refreshing DB token (needs the Meta redirect step below). Built and committed, awaiting Ali's LAST PUSH: the **engagement inbox** (`/marketing/engagement` — comments + DMs live-fetched, Alfred drafts in founder voices ali/etienne with category labels, human approves every send; DM read/send best-effort on this connection type).
+
+**Remaining (all logged in MARKETING-TODO.md):**
+1. Ali: `build and push to main` (ships the engagement inbox) — may have happened right after this handoff was written.
+2. External errands (~30 min): register OAuth redirect `https://swisswiper-platform.vercel.app/api/instagram/callback` in Meta dashboard (activates Reconnect/auto-refresh); CRON_SECRET reset + cron-job.org daily 11:30 job (activates scheduled auto-publish; Publish-now works without it); Gemini billing (Nano Banana/Veo).
+3. Tests: first Publish-now to @swisswiper; comment → Alfred draft → send loop; voice create_post.
+4. v2 builds: webhooks + auto-acknowledgment + per-category automation switches; Stories/carousels polish; TikTok/YouTube; LinkedIn auto-pull; team approvals.
+5. Non-marketing backlog unchanged: task phases, admin panel, UX top-10, pricing engine → partner portal.
+
+---
+
+## (Superseded during the session — kept for context)
+
 **Remaining to fully complete Phase 1 (in order):**
 1. Vercel is on **Hobby** (2-cron limit), so the publish trigger is external: **cron-job.org** account → daily 11:30 Europe/Berlin → GET `https://swisswiper-platform.vercel.app/api/marketing/publish` with header `Authorization: Bearer <CRON_SECRET from Vercel>`. ← was in progress at session end (CRON_SECRET only exists in Vercel; reveal via Edit, or set a fresh value + redeploy).
 2. End-to-end test post (caption + image + today's date + arm the switch → run the job).
