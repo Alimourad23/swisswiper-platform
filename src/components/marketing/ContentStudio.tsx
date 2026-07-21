@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
-import { setInstagramPublish } from "@/lib/marketing/schedule-actions";
+import { setInstagramPublish, publishNow } from "@/lib/marketing/schedule-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
@@ -81,6 +81,8 @@ export default function ContentStudio({
   const [genSize, setGenSize] = useState("2K");
   const [genCount, setGenCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<"choose" | "upload" | "create">("choose");
+  const [publishingNow, setPublishingNow] = useState(false);
+  const [confirmPub, setConfirmPub] = useState(false);
   const [genKind, setGenKind] = useState<"image" | "video">("image");
   const [genSource, setGenSource] = useState<"text" | "image">("text");
   const [genSourceId, setGenSourceId] = useState<string | null>(null);
@@ -135,6 +137,27 @@ export default function ContentStudio({
       setAutoDrafting(false);
     })();
   }, [post.id, post.seed_idea, post.body, post.title, post.channel, onBodyChange, onBodySave]);
+
+  async function doPublishNow() {
+    setConfirmPub(false);
+    setPublishingNow(true);
+    try {
+      const r = await publishNow(post.id);
+      if (r.ok) {
+        onLocalPatch(post.id, {
+          status: "published",
+          publish_status: "published",
+          external_permalink: r.permalink ?? null,
+          publish_error: null,
+        });
+      } else {
+        onLocalPatch(post.id, { publish_status: "failed", publish_error: r.error ?? "Publishing failed." });
+      }
+    } catch {
+      onLocalPatch(post.id, { publish_status: "failed", publish_error: "Publishing failed — try again." });
+    }
+    setPublishingNow(false);
+  }
 
   async function uploadFiles(files: FileList) {
     setUploading(true);
@@ -416,9 +439,9 @@ export default function ContentStudio({
               </p>
             )}
 
-            {/* Instagram auto-publish */}
+            {/* Instagram auto-publish + publish-now */}
             {post.channel === "instagram" && (
-              <div className="rounded-[var(--radius-control)] border border-hairline bg-bg px-4 py-3">
+              <div className="flex flex-col gap-3 rounded-[var(--radius-control)] border border-hairline bg-bg px-4 py-3">
                 {post.publish_status === "published" ? (
                   <p className="text-xs text-emerald-700">
                     Published to Instagram
@@ -436,38 +459,79 @@ export default function ContentStudio({
                       </>
                     )}
                   </p>
-                ) : post.publish_status === "failed" ? (
-                  <div className="flex flex-col gap-2">
-                    <p className="text-xs text-red-600">Auto-publish failed — {post.publish_error || "unknown error."}</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onLocalPatch(post.id, { publish_status: null, publish_error: null });
-                        void setInstagramPublish(post.id, { reset: true });
-                      }}
-                      className="self-start rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
-                    >
-                      Clear — retry at the next publish run
-                    </button>
-                  </div>
-                ) : post.publish_status === "publishing" ? (
+                ) : post.publish_status === "publishing" || publishingNow ? (
                   <p className="text-xs text-peri-deep">Publishing to Instagram…</p>
                 ) : (
-                  <label className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(post.auto_publish)}
-                      onChange={(e) => {
-                        onLocalPatch(post.id, { auto_publish: e.target.checked });
-                        void setInstagramPublish(post.id, { autoPublish: e.target.checked });
-                      }}
-                      className="mt-0.5 accent-[#5C66A6]"
-                    />
-                    <span className="text-xs text-muted">
-                      <span className="font-medium text-ink">Auto-publish to Instagram</span> — goes live late morning on
-                      the scheduled day. Needs the caption written, an image attached, and a scheduled date.
-                    </span>
-                  </label>
+                  <>
+                    {post.publish_status === "failed" && (
+                      <p className="text-xs text-red-600">
+                        Last attempt failed — {post.publish_error || "unknown error."}
+                      </p>
+                    )}
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(post.auto_publish)}
+                        onChange={(e) => {
+                          onLocalPatch(post.id, { auto_publish: e.target.checked });
+                          void setInstagramPublish(post.id, { autoPublish: e.target.checked });
+                        }}
+                        className="mt-0.5 accent-[#5C66A6]"
+                      />
+                      <span className="text-xs text-muted">
+                        <span className="font-medium text-ink">Auto-publish to Instagram</span> — goes live late
+                        morning on the scheduled day. Needs the caption written, an image attached, and a scheduled
+                        date.
+                      </span>
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {confirmPub ? (
+                        <>
+                          <span className="text-xs text-muted">Post this to @swisswiper right now?</span>
+                          <button
+                            type="button"
+                            onClick={() => void doPublishNow()}
+                            className="rounded-full bg-peri-deep px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4d5793]"
+                          >
+                            Yes — publish now
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmPub(false)}
+                            className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmPub(true)}
+                            disabled={!post.body.trim() || images.length === 0}
+                            className="rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-peri-deep transition-colors hover:border-peri-deep disabled:opacity-50"
+                          >
+                            Publish to Instagram now
+                          </button>
+                          {(!post.body.trim() || images.length === 0) && (
+                            <span className="text-[11px] text-hint">needs a caption and an image first</span>
+                          )}
+                          {post.publish_status === "failed" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onLocalPatch(post.id, { publish_status: null, publish_error: null });
+                                void setInstagramPublish(post.id, { reset: true });
+                              }}
+                              className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
+                            >
+                              Clear error
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             )}

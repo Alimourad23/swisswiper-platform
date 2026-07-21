@@ -5,6 +5,7 @@ import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getIsFounder } from "@/lib/auth/role";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // "Publish now" waits for Instagram to process media
 
 export default async function MarketingCalendarPage() {
   const m = getModule("marketing")!;

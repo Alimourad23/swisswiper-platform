@@ -141,3 +141,16 @@ export async function setInstagramPublish(
   revalidatePath("/dashboard/marketing/pipeline");
   return { ok: !error };
 }
+
+/* "Publish now" from the Studio: publish this Instagram post immediately via
+   the same engine the daily run uses (atomic claim included). */
+export async function publishNow(
+  id: string,
+): Promise<{ ok: boolean; permalink?: string | null; error?: string }> {
+  const c = await uid();
+  if (!c) return { ok: false, error: "You're not signed in." };
+  const { publishSingleInstagramPost } = await import("@/lib/marketing/publish");
+  const r = await publishSingleInstagramPost(c.supabase, id);
+  revalidatePath("/dashboard/marketing/pipeline");
+  return r;
+}

@@ -120,6 +120,61 @@ export async function publishDueInstagramPosts(
   return { due: due.length, published, failed, results };
 }
 
+/* Publish ONE post immediately ("Publish now" in the Studio). Same engine and
+   the same atomic claim as the cron — a post mid-publish elsewhere can't be
+   double-posted. Works from a signed-in session client (RLS allows the team to
+   update content_posts). A previously failed post can be retried directly. */
+export async function publishSingleInstagramPost(
+  db: SupabaseClient,
+  postId: string,
+): Promise<{ ok: boolean; permalink?: string | null; error?: string }> {
+  const { data: row } = await db
+    .from("content_posts")
+    .select("id, title, body, channel, status, publish_status")
+    .eq("id", postId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "I couldn't find that post." };
+  const post = row as { id: string; title: string; body: string; channel: string; status: string; publish_status: string | null };
+  if (post.channel !== "instagram") return { ok: false, error: "Only Instagram posts can be published here." };
+  if (post.status === "published" || post.publish_status === "published") {
+    return { ok: false, error: "This post is already published." };
+  }
+
+  // Atomic claim: null or failed → publishing (never steal an in-flight publish).
+  const { data: claimed } = await db
+    .from("content_posts")
+    .update({ publish_status: "publishing", publish_error: null })
+    .eq("id", postId)
+    .or("publish_status.is.null,publish_status.eq.failed")
+    .select("id");
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, error: "This post is already being published." };
+  }
+
+  try {
+    const igUserId = (await getInstagramProfile()).userId;
+    const mediaId = await publishOne(db, igUserId, { id: post.id, title: post.title, body: post.body, scheduled_for: "" });
+    const permalink = await getMediaPermalink(mediaId);
+    await db
+      .from("content_posts")
+      .update({
+        status: "published",
+        publish_status: "published",
+        published_at: new Date().toISOString(),
+        external_post_id: mediaId,
+        external_permalink: permalink,
+        publish_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", postId);
+    return { ok: true, permalink };
+  } catch (e) {
+    const note = e instanceof Error ? e.message : "Publishing failed.";
+    await db.from("content_posts").update({ publish_status: "failed", publish_error: note }).eq("id", postId);
+    return { ok: false, error: note };
+  }
+}
+
 /* Publish a single post: pick its first media, create the container, wait for
    Meta to process it, publish. Throws a friendly Error on any problem. */
 async function publishOne(admin: SupabaseClient, igUserId: string, post: DuePost): Promise<string> {
