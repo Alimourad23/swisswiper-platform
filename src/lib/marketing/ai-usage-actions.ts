@@ -31,3 +31,16 @@ export async function setBudget(cap: number): Promise<{ ok: boolean }> {
   revalidatePath("/dashboard/marketing");
   return { ok: !error };
 }
+
+/* Founders only. Sets the prepaid credit balance (what you bought from Google).
+   Remaining credit = this value − all-time estimated spend. */
+export async function setCredit(credit: number): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const value = Math.max(0, Math.round(credit * 100) / 100);
+  const { error } = await supabase
+    .from("ai_budget")
+    .update({ credit_usd: value, updated_at: new Date().toISOString() })
+    .eq("id", "budget");
+  revalidatePath("/dashboard/marketing");
+  return { ok: !error };
+}

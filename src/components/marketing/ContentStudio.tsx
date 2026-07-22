@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
+import { getUsageSummary } from "@/lib/marketing/ai-usage-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
@@ -79,6 +80,7 @@ export default function ContentStudio({
   const [genSize, setGenSize] = useState("2K");
   const [genCount, setGenCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<"choose" | "upload" | "create">("choose");
+  const [creditView, setCreditView] = useState<{ remaining: number; credit: number } | null>(null);
   const [genKind, setGenKind] = useState<"image" | "video">("image");
   const [genSource, setGenSource] = useState<"text" | "image">("text");
   const [genSourceId, setGenSourceId] = useState<string | null>(null);
@@ -106,6 +108,16 @@ export default function ContentStudio({
       alive = false;
     };
   }, [post.id]);
+
+  // Show remaining AI credit while generating (fetched when the Create panel opens).
+  useEffect(() => {
+    if (mediaMode !== "create") return;
+    let alive = true;
+    void getUsageSummary()
+      .then((u) => { if (alive) setCreditView({ remaining: u.remaining, credit: u.credit }); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [mediaMode]);
 
   // Auto-draft the copy from Alfred's seed idea (once) when the post came from a
   // suggestion and has no body yet.
@@ -199,6 +211,7 @@ export default function ContentStudio({
             setVideoBusy(false);
             setVideoStatus("");
             setGenPrompt("");
+            void getUsageSummary().then((u) => setCreditView({ remaining: u.remaining, credit: u.credit })).catch(() => {});
             return;
           }
           if (d.status === "error") {
@@ -250,6 +263,7 @@ export default function ContentStudio({
       if (data.media && data.media.length) {
         setMedia((m) => [...m, ...(data.media as ContentMedia[])]);
         setGenPrompt("");
+        void getUsageSummary().then((u) => setCreditView({ remaining: u.remaining, credit: u.credit })).catch(() => {});
       } else {
         setGenError(data.error || "Generation failed.");
       }
@@ -491,6 +505,14 @@ export default function ContentStudio({
               {/* Create with Alfred (Nano Banana / Veo) */}
               {mediaMode === "create" && (
                 <div className="flex flex-col gap-2">
+                  {creditView && creditView.credit > 0 && (
+                    <div className="flex items-center justify-between rounded-[var(--radius-control)] bg-bg px-2.5 py-1.5 text-[11px]">
+                      <span className="text-hint">Estimated AI credit</span>
+                      <span className={creditView.remaining <= 0 ? "font-medium text-red-600" : creditView.remaining <= creditView.credit * 0.15 ? "font-medium text-amber-700" : "font-medium text-ink"}>
+                        ≈ ${Math.max(0, creditView.remaining).toFixed(2)} left
+                      </span>
+                    </div>
+                  )}
                   {/* image vs video */}
                   {isFounder && (
                     <div className="flex w-fit rounded-full bg-bg p-0.5 text-xs">

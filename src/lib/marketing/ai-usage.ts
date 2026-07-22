@@ -28,30 +28,55 @@ export type UsageSummary = {
   cap: number; // monthly cap, USD
   images: number; // images generated this month
   videoSeconds: number; // seconds of video this month
+  credit: number; // prepaid credit the founder bought (USD) — 0 = not tracked
+  spentAllTime: number; // all-time estimated spend, USD
+  remaining: number; // credit − spentAllTime (can be negative; clamp for display)
 };
 
 export async function getUsage(): Promise<UsageSummary> {
   const supabase = await createClient();
   const [{ data: rows }, { data: budget }] = await Promise.all([
-    supabase.from("ai_usage").select("kind, units, cost_usd").gte("created_at", monthStart()),
-    supabase.from("ai_budget").select("monthly_cap_usd").eq("id", "budget").maybeSingle(),
+    supabase.from("ai_usage").select("kind, units, cost_usd, created_at"),
+    supabase.from("ai_budget").select("monthly_cap_usd, credit_usd").eq("id", "budget").maybeSingle(),
   ]);
+  const start = monthStart();
   let spend = 0;
   let images = 0;
   let videoSeconds = 0;
-  for (const r of (rows ?? []) as { kind: string; units: number; cost_usd: number }[]) {
-    spend += Number(r.cost_usd) || 0;
-    if (r.kind === "image") images += Number(r.units) || 0;
-    if (r.kind === "video") videoSeconds += Number(r.units) || 0;
+  let spentAllTime = 0;
+  for (const r of (rows ?? []) as { kind: string; units: number; cost_usd: number; created_at: string }[]) {
+    const c = Number(r.cost_usd) || 0;
+    spentAllTime += c;
+    if (r.created_at >= start) {
+      spend += c;
+      if (r.kind === "image") images += Number(r.units) || 0;
+      if (r.kind === "video") videoSeconds += Number(r.units) || 0;
+    }
   }
-  const cap = Number((budget as { monthly_cap_usd?: number } | null)?.monthly_cap_usd ?? 50);
-  return { spend: Math.round(spend * 100) / 100, cap, images, videoSeconds };
+  const b = budget as { monthly_cap_usd?: number; credit_usd?: number } | null;
+  const cap = Number(b?.monthly_cap_usd ?? 50);
+  const credit = Number(b?.credit_usd ?? 0);
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return {
+    spend: r2(spend),
+    cap,
+    images,
+    videoSeconds,
+    credit: r2(credit),
+    spentAllTime: r2(spentAllTime),
+    remaining: r2(credit - spentAllTime),
+  };
 }
 
-/* Is there budget for an estimated additional cost? */
-export async function budgetCheck(estCost: number): Promise<{ ok: boolean; spend: number; cap: number }> {
+/* Is there budget for an estimated additional cost? Blocks when it would breach
+   the monthly cap OR run past the prepaid credit (credit only enforced when set). */
+export async function budgetCheck(
+  estCost: number,
+): Promise<{ ok: boolean; spend: number; cap: number; remaining: number }> {
   const u = await getUsage();
-  return { ok: u.spend + estCost <= u.cap, spend: u.spend, cap: u.cap };
+  const capOk = u.spend + estCost <= u.cap;
+  const creditOk = u.credit <= 0 ? true : u.spentAllTime + estCost <= u.credit;
+  return { ok: capOk && creditOk, spend: u.spend, cap: u.cap, remaining: u.remaining };
 }
 
 /* Record a generation's estimated cost. */
