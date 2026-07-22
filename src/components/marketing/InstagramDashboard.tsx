@@ -1,6 +1,7 @@
 "use client";
 
 import { COCKPIT_CSS, Spark, fmt } from "./cockpit-ui";
+import { InstagramLogo } from "./logos";
 
 /* The Instagram channel dashboard — same compact cockpit language as the
    overview and LinkedIn, in sidebar-linked sections (#overview · #content ·
@@ -52,11 +53,23 @@ export default function InstagramDashboard({ data }: { data: IgData }) {
   const demo = data.demographics?.entries ?? [];
   const dmax = Math.max(...demo.map((d) => d.value), 1);
 
+  // Alfred's Instagram-specific read
+  const igInsight = !data.media.length
+    ? "No posts yet — publish your first and the read starts here."
+    : formats.length
+      ? `${formats[0].type} posts lead engagement (${formats[0].avg.toFixed(1)} avg). ${data.reach28 !== null ? `28-day reach is ${fmt(data.reach28)}` : "Reach builds as you post"} — keep the cadence steady and lean into what performs.`
+      : `${fmt(data.followers)} followers and building — post consistently to compound reach.`;
+
   return (
     <div className="mc">
       <div className="mc-head">
-        <h1 className="mc-h1"><span style={{ color: "var(--s-instagram)", fontSize: 15 }}>●</span> Instagram <span>@{data.username} · live from Instagram</span></h1>
+        <h1 className="mc-h1"><InstagramLogo size={18} /> Instagram <span>@{data.username} · live from Instagram</span></h1>
         <div className="mc-right"><span className="mc-badge pink">Live API</span></div>
+      </div>
+
+      {/* Alfred's read — Instagram-specific */}
+      <div className="mc-card mc-nextmove">
+        <div className="mc-nmtxt"><span className="mc-chip" style={{ background: "var(--a-peri-bg)", color: "var(--a-peri)" }}>✦</span><div><b>Alfred’s read</b><p>{igInsight}</p></div></div>
       </div>
 
       {/* OVERVIEW */}

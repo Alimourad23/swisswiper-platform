@@ -12,6 +12,7 @@ import {
   alfredInsight,
 } from "@/lib/linkedin/compute";
 import { COCKPIT_CSS, Spark, Ring, fmt, pct1 } from "./cockpit-ui";
+import { LinkedInLogo } from "./logos";
 
 /* The LinkedIn channel dashboard — same compact cockpit language as the
    overview, in sections the sidebar links to (#overview · #performance ·
@@ -68,7 +69,7 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
   return (
     <div className="mc">
       <div className="mc-head">
-        <h1 className="mc-h1"><span style={{ color: "var(--s-linkedin)", fontSize: 15 }}>●</span> LinkedIn <span>SwissWiper Page · from your weekly export</span></h1>
+        <h1 className="mc-h1"><LinkedInLogo size={18} /> LinkedIn <span>SwissWiper Page · from your weekly export</span></h1>
         <div className="mc-right">
           <span className="mc-badge blue">Auto · export</span>
           <div className="mc-toggle">

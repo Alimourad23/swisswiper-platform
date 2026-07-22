@@ -11,15 +11,16 @@ export default function ModuleHeader({
   subtitle: string;
   right?: ReactNode;
 }) {
+  // Compact sizing to match the marketing cockpit — one consistent scale app-wide.
   return (
-    <div className="sw-card flex items-start justify-between gap-4 px-7 py-6">
-      <div className="flex items-start gap-4">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[var(--radius-control)] bg-peri-soft text-peri-deep">
+    <div className="flex items-center justify-between gap-3 border-b border-hairline pb-2.5">
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-peri-soft text-peri-deep [&_svg]:h-4 [&_svg]:w-4">
           {icon}
-        </div>
-        <div>
-          <h1 className="text-2xl font-medium tracking-tight">{title}</h1>
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted">{subtitle}</p>
+        </span>
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-[19px] font-medium tracking-tight">{title}</h1>
+          <p className="text-[12px] text-muted">{subtitle}</p>
         </div>
       </div>
       {right && <div className="shrink-0">{right}</div>}

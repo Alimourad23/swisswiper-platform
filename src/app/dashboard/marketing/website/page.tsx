@@ -26,6 +26,10 @@ export default function WebsitePage() {
           </div>
         </div>
 
+        <div className="mc-card mc-nextmove">
+          <div className="mc-nmtxt"><span className="mc-chip" style={{ background: "var(--a-peri-bg)", color: "var(--a-peri)" }}>✦</span><div><b>Alfred’s read</b><p>Once GA4 is live I’ll watch which channels actually drive site visits, which pages hold attention, and where visits turn into inquiries — and flag what to double down on. Nothing to read yet; the tag needs to start reporting.</p></div></div>
+        </div>
+
         <section className="mc-zone" id="overview">
           <div className="mc-zhead">
             <div className="mc-zt"><span className="mc-znum">01</span><h2>Overview</h2><span className="mc-zd">— fills in once GA4 is live</span></div>

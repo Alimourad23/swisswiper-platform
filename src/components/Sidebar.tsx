@@ -5,6 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { founderNav, channelSections, type NavItem } from "@/lib/modules";
 import { LivePill } from "@/components/Pill";
+import { LinkedInLogo, InstagramLogo } from "@/components/marketing/logos";
+
+function childLogo(href: string) {
+  if (href === "/dashboard/marketing/linkedin") return <LinkedInLogo size={14} />;
+  if (href === "/dashboard/marketing/instagram") return <InstagramLogo size={14} />;
+  return null;
+}
 
 /* The sidebar reads the same way for every module: the module sits at the top,
    its own breakdown beneath it, and the other modules step back into a compact
@@ -224,16 +231,18 @@ function ChildLink({
     );
   }
   const active = pathname === child.href;
+  const logo = childLogo(child.href);
   return (
     <Link
       href={child.href}
       aria-current={active ? "page" : undefined}
       className={[
-        `block rounded-[var(--radius-control)] ${pad} py-1.5 text-[13px] transition-colors duration-150`,
+        `flex items-center gap-2 rounded-[var(--radius-control)] ${pad} py-1.5 text-[13px] transition-colors duration-150`,
         active ? "bg-peri-soft font-medium text-peri-deep" : "text-muted hover:bg-bg hover:text-ink",
       ].join(" ")}
     >
-      {child.name}
+      {logo}
+      <span>{child.name}</span>
     </Link>
   );
 }
