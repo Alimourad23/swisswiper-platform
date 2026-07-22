@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { founderNav, comingSoonNav, type NavItem } from "@/lib/modules";
-import { LivePill, SoonPill } from "@/components/Pill";
+import { founderNav, channelSections, type NavItem } from "@/lib/modules";
+import { LivePill } from "@/components/Pill";
 
 /* The sidebar reads the same way for every module: the module sits at the top,
    its own breakdown beneath it, and the other modules step back into a compact
@@ -99,16 +99,6 @@ export default function Sidebar() {
               </Link>
             );
           })}
-          <div className="my-1.5 h-px w-6 bg-hairline" />
-          {comingSoonNav.map((item) => (
-            <span
-              key={item.name}
-              title={`${item.name} — coming soon`}
-              className="grid h-9 w-9 cursor-default place-items-center rounded-[var(--radius-control)] text-hint opacity-45"
-            >
-              {item.icon}
-            </span>
-          ))}
         </nav>
       </aside>
     );
@@ -165,9 +155,29 @@ export default function Sidebar() {
                       {item.groups.map((g, gi) => (
                         <div key={gi} className="flex flex-col">
                           {g.label && <GroupLabel>{g.label}</GroupLabel>}
-                          {g.items.map((child) => (
-                            <ChildLink key={child.name} child={child} pathname={pathname} />
-                          ))}
+                          {g.items.map((child) => {
+                            const sections = channelSections[child.href];
+                            const onChannel = pathname === child.href;
+                            return (
+                              <div key={child.name} className="flex flex-col">
+                                <ChildLink child={child} pathname={pathname} />
+                                {/* when you're on this channel, its own sections appear */}
+                                {sections && onChannel && (
+                                  <div className="mb-1 ml-6 flex flex-col border-l border-hairline pl-2">
+                                    {sections.map((sec) => (
+                                      <a
+                                        key={sec.name}
+                                        href={sec.href}
+                                        className="rounded-[var(--radius-control)] px-3 py-1 text-[12.5px] text-muted transition-colors hover:bg-bg hover:text-ink"
+                                      >
+                                        {sec.name}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       ))}
                     </div>
@@ -185,23 +195,6 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <div>
-          <SectionLabel>Coming soon</SectionLabel>
-          <div className="flex flex-col gap-1.5">
-            {comingSoonNav.map((item) => (
-              <div
-                key={item.name}
-                aria-disabled="true"
-                title="Coming soon"
-                className="flex cursor-default select-none items-center gap-3 rounded-[var(--radius-control)] border border-dashed border-[rgba(92,102,166,0.28)] bg-peri-soft/60 px-3 py-2.5 text-sm text-hint"
-              >
-                <span className="shrink-0 opacity-70">{item.icon}</span>
-                <span className="flex-1">{item.name}</span>
-                <SoonPill />
-              </div>
-            ))}
-          </div>
-        </div>
       </nav>
     </aside>
   );

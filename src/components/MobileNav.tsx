@@ -3,10 +3,9 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { founderNav, comingSoonNav } from "@/lib/modules";
+import { founderNav } from "@/lib/modules";
 
-/* Horizontal, scrollable nav shown only on small screens (sidebar is hidden).
-   Live items are clickable; coming-soon items are shown shaded and disabled. */
+/* Horizontal, scrollable nav shown only on small screens (sidebar is hidden). */
 export default function MobileNav() {
   const pathname = usePathname();
 
@@ -54,15 +53,6 @@ export default function MobileNav() {
           </Fragment>
         );
       })}
-      {comingSoonNav.map((item) => (
-        <span
-          key={item.name}
-          aria-disabled="true"
-          className="shrink-0 cursor-default select-none rounded-full border border-dashed border-[rgba(92,102,166,0.28)] bg-peri-soft/60 px-4 py-1.5 text-sm text-hint"
-        >
-          {item.name}
-        </span>
-      ))}
     </nav>
   );
 }

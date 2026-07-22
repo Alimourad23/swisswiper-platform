@@ -1,13 +1,11 @@
-import ModuleHeader from "@/components/ModuleHeader";
-import { AutoTag, ServiceBadge } from "@/components/Pill";
-import LinkedInClient from "@/components/marketing/LinkedInClient";
-import UploadDropzone from "@/components/marketing/UploadDropzone";
+import LinkedInDashboard from "@/components/marketing/LinkedInDashboard";
 import NotableEngagers, { type Engager } from "@/components/marketing/NotableEngagers";
-import { icons } from "@/lib/modules";
+import UploadDropzone from "@/components/marketing/UploadDropzone";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function getEngagers(): Promise<Engager[]> {
   try {
@@ -37,23 +35,20 @@ export default async function LinkedInPage() {
   const [engagers, inquiries] = await Promise.all([getEngagers(), getInquiries()]);
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <ModuleHeader
-        icon={icons.marketing}
-        title="LinkedIn"
-        subtitle="SwissWiper Page analytics, from your weekly export — read-only."
-        right={
-          <div className="flex items-center gap-2">
-            <AutoTag />
-            <ServiceBadge label="LinkedIn" />
-          </div>
-        }
+    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5">
+      <LinkedInDashboard
+        metrics={metrics}
+        inquiries={inquiries}
+        source={source}
+        capturedAt={capturedAt}
+        engagers={engagers}
       />
-
-      <LinkedInClient metrics={metrics} inquiries={inquiries} capturedAt={capturedAt} source={source} />
-
-      <NotableEngagers initial={engagers} />
-      <UploadDropzone />
+      {/* Manage — add notable engagers, refresh the export */}
+      <div className="flex flex-col gap-4 border-t border-hairline pt-5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-hint">Manage</p>
+        <NotableEngagers initial={engagers} />
+        <UploadDropzone />
+      </div>
     </div>
   );
 }

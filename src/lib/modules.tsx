@@ -169,7 +169,7 @@ export const founderNav: NavItem[] = [
         items: [
           { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
           { name: "Instagram", href: "/dashboard/marketing/instagram" },
-          { name: "Website", href: "https://swisswiper.com/", external: true },
+          { name: "Website", href: "/dashboard/marketing/website" },
         ],
       },
       {
@@ -188,9 +188,17 @@ export const founderNav: NavItem[] = [
   },
 ];
 
-/* Not clickable yet — shown shaded with a muted "Soon" pill. */
-export const comingSoonNav: NavItem[] = [
-  { name: "Sales", icon: icons.sales },
-  { name: "Orders", icon: icons.orders },
-  { name: "Finance", icon: icons.finance },
-];
+/* When you open a channel, its own sections appear in the sidebar (anchors that
+   scroll the channel dashboard). Keyed by the channel's page path. */
+export const channelSections: Record<string, NavChild[]> = {
+  "/dashboard/marketing/linkedin": [
+    { name: "Overview", href: "/dashboard/marketing/linkedin#overview" },
+    { name: "Performance", href: "/dashboard/marketing/linkedin#performance" },
+    { name: "Audience", href: "/dashboard/marketing/linkedin#audience" },
+  ],
+  "/dashboard/marketing/instagram": [
+    { name: "Overview", href: "/dashboard/marketing/instagram#overview" },
+    { name: "Content", href: "/dashboard/marketing/instagram#content" },
+    { name: "Audience", href: "/dashboard/marketing/instagram#audience" },
+  ],
+};
