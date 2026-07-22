@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SwissWiper — Marketing Overview · UI Direction v6 (single canvas)</title>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #F5F6F9;
+    --surface: #FFFFFF;
+    --ink: #0B0B0F;
+    --muted: #52514E;
+    --hint: #9A9BA4;
+    --hairline: rgba(11,11,15,0.07);
+    --peri: #CAD1E8;
+    --peri-soft: #EEF1F8;
+    --peri-deep: #5C66A6;
+    --peri-deeper: #454F8A;
+    --s-linkedin: #0A66C2;
+    --s-instagram: #C2367B;
+    --a-blue: #0A66C2;   --a-blue-bg: #E8F0FA;
+    --a-pink: #C2367B;   --a-pink-bg: #FAEAF2;
+    --a-teal: #0F766E;   --a-teal-bg: #E6F3F1;
+    --a-amber: #B45309;  --a-amber-bg: #FAF0E4;
+    --a-peri: #5C66A6;   --a-peri-bg: #EEF1F8;
+    --o1:#9aa6d0; --o2:#7a88bb; --o3:#5C66A6; --o4:#454f8a; --o5:#333c6e;
+    --good: #047857;
+    --radius: 13px; --radius-sm: 9px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font-family: 'Satoshi', sans-serif; -webkit-font-smoothing: antialiased; }
+  .app { display: grid; grid-template-columns: 208px 1fr; min-height: 100vh; }
+
+  /* ═══ sidebar ═══ */
+  aside { background: var(--surface); border-right: 1px solid var(--hairline); padding: 16px 11px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .wordmark { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; padding: 2px 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .collapse { color: var(--hint); font-size: 12px; cursor: pointer; border: 1px solid var(--hairline); border-radius: 6px; padding: 0 6px; font-weight: 400; }
+  .nav a.compact { padding: 4px 9px; font-size: 11.5px; opacity: 0.72; }
+  .nav a.compact .ic { font-size: 11px; }
+  .nav-label { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--hint); font-weight: 500; padding: 9px 9px 3px; }
+  .nav a { display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: 8px; font-size: 12.5px; color: var(--muted); text-decoration: none; font-weight: 400; }
+  .nav a:hover { background: var(--page); color: var(--ink); }
+  .nav a.on { background: var(--peri-soft); color: var(--peri-deep); font-weight: 500; }
+  .nav a .ic { width: 16px; text-align: center; font-size: 12px; opacity: 0.85; }
+  .nav a .live { margin-left: auto; font-size: 10px; font-weight: 700; }
+  .me { margin-top: auto; display: flex; gap: 9px; align-items: center; padding: 9px 8px 2px; border-top: 1px solid var(--hairline); }
+  .me .av { width: 27px; height: 27px; border-radius: 999px; background: var(--peri); color: var(--peri-deeper); display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+  .me b { display: block; font-size: 12px; font-weight: 500; }
+  .me span { font-size: 10px; color: var(--hint); }
+
+  /* ═══ main ═══ */
+  main { padding: 18px 22px 32px; min-width: 0; }
+  .wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 13px; }
+
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex: none; }
+  .head h1 { font-size: 19px; font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+  .head h1 span { color: var(--hint); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .head .right { display: flex; align-items: center; gap: 9px; }
+  .toggle { display: flex; background: var(--surface); border: 1px solid var(--hairline); border-radius: 999px; padding: 2px; }
+  .toggle button { border: 0; background: transparent; font: inherit; font-size: 11px; font-weight: 500; color: var(--muted); padding: 4px 11px; border-radius: 999px; cursor: pointer; }
+  .toggle button.on { background: var(--peri-soft); color: var(--peri-deep); }
+  .cta { background: var(--peri-deep); color: #fff; border: 0; font: inherit; font-size: 11.5px; font-weight: 500; padding: 7px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+  .cta:hover { background: var(--peri-deeper); }
+  .cta.sm { padding: 6px 11px; font-size: 11px; }
+
+  .card { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); box-shadow: 0 1px 2px rgba(11,11,15,0.03); }
+  .chip { flex: none; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; }
+
+  /* zone story */
+  .zone { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .zhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 1px 5px; border-bottom: 1px solid var(--hairline); }
+  .zhead .zt { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+  .zhead .znum { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: var(--peri-deep); font-variant-numeric: tabular-nums; }
+  .zhead h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .zhead .zd { font-size: 11px; color: var(--muted); }
+  .zhead .zctx { font-size: 10.5px; color: var(--hint); }
+  .viewall { font-size: 11px; color: var(--peri-deep); text-decoration: none; font-weight: 500; white-space: nowrap; }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .kpi { padding: 9px 11px 8px; display: flex; flex-direction: column; gap: 0; }
+  .kpi .top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .kpi .chip { width: 22px; height: 22px; border-radius: 7px; font-size: 11px; }
+  .kpi .lbl { font-size: 9.5px; color: var(--hint); font-weight: 500; line-height: 1.2; }
+  .kpi .val { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+  .kpi .delta { font-size: 9.5px; font-weight: 500; color: var(--good); }
+  .kpi .delta.flat { color: var(--hint); }
+  .kpi svg { margin-top: 3px; width: 100%; height: 16px; display: block; }
+
+  /* performance grids */
+  .perfA { display: grid; grid-template-columns: 3.7fr 4.6fr 3.7fr; gap: 11px; }
+  .perfB { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 11px; }
+  .zsplit { display: grid; grid-template-columns: 6.6fr 4.4fr; gap: 14px; align-items: start; }
+
+  .panel { padding: 11px 13px 10px; }
+  .panel .ph { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .panel h3 { margin: 0; font-size: 12.5px; font-weight: 500; }
+  .panel .sub { margin: 1px 0 0; font-size: 10px; color: var(--hint); }
+
+  /* funnel */
+  .funnel { display: flex; flex-direction: column; gap: 3px; margin-top: 9px; align-items: center; }
+  .fstage { position: relative; height: 20px; display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 500; border-radius: 5px; width: var(--w); min-width: 84px; white-space: nowrap; }
+  .fstage small { position: absolute; right: -80px; color: var(--muted); font-weight: 400; width: 74px; text-align: left; font-size: 9.5px; }
+  .fwrap { padding-right: 80px; }
+  .fnote { margin-top: 8px; font-size: 10px; color: var(--hint); text-align: center; }
+
+  /* chart */
+  .legend { display: flex; gap: 12px; align-items: center; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 4px; }
+  .chart-wrap { position: relative; }
+  #tooltip { position: absolute; pointer-events: none; background: var(--ink); color: #fff; font-size: 10.5px; padding: 6px 9px; border-radius: 7px; opacity: 0; transition: opacity .12s; white-space: nowrap; z-index: 5; }
+  #tooltip .t { color: var(--peri); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 11px; }
+  th { text-align: left; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--hint); font-weight: 500; padding: 5px 5px; border-bottom: 1px solid var(--hairline); }
+  td { padding: 6px 5px; border-bottom: 1px solid var(--hairline); }
+  td:first-child { white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .ctile { display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 5px; color: #fff; font-size: 9px; font-weight: 700; margin-right: 7px; vertical-align: middle; }
+  .soon td { color: var(--hint); }
+  td .g { color: var(--good); font-weight: 500; font-size: 10.5px; }
+
+  .content-item { display: flex; gap: 9px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+  .content-item:last-child { border-bottom: 0; }
+  .thumb { width: 30px; height: 30px; border-radius: 7px; background: var(--ink); color: #fff; font-size: 5px; display: grid; place-items: center; text-align: center; line-height: 1.45; font-weight: 700; letter-spacing: 0.04em; padding: 2px; flex: none; }
+  .thumb.alt { background: var(--peri-soft); color: var(--peri-deep); }
+  .content-item .t { flex: 1; min-width: 0; }
+  .content-item .t b { display: block; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .content-item .t span { font-size: 9.5px; color: var(--hint); }
+  .content-item .m { font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
+
+  .hbar { display: grid; grid-template-columns: 62px 1fr 40px; gap: 7px; align-items: center; font-size: 10.5px; margin-top: 6px; }
+  .hbar:first-of-type { margin-top: 8px; }
+  .hbar .n { color: var(--muted); }
+  .hbar .track { height: 12px; border-radius: 4px; background: var(--peri-soft); overflow: hidden; }
+  .hbar .fill { height: 100%; border-radius: 4px; background: var(--peri-deep); }
+  .hbar .v { text-align: right; font-weight: 500; }
+  .hbar .v.soon { font-weight: 400; color: var(--hint); }
+
+  .statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 9px; }
+  .stat { display: flex; flex-direction: column; gap: 0; }
+  .stat .v { font-size: 17px; font-weight: 500; line-height: 1.1; }
+  .stat .l { font-size: 9.5px; color: var(--hint); }
+
+  .ops { display: flex; margin-top: 9px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+  .ops div { flex: 1; padding: 6px 9px; border-right: 1px solid var(--hairline); }
+  .ops div:last-child { border-right: 0; }
+  .ops b { display: block; font-size: 14px; font-weight: 500; }
+  .ops span { font-size: 9px; color: var(--hint); }
+  .ops .ok b { color: var(--good); }
+
+  /* insights */
+  .insights { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .insight { padding: 9px 11px; display: flex; gap: 8px; align-items: flex-start; }
+  .insight .chip { width: 22px; height: 22px; font-size: 11px; }
+  .insight b { display: block; font-size: 11px; font-weight: 500; margin-bottom: 1px; line-height: 1.25; }
+  .insight span { font-size: 9.5px; color: var(--muted); line-height: 1.4; }
+
+  .nextmove { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 13px; background: linear-gradient(180deg, #FFFFFF 0%, var(--peri-soft) 240%); }
+  .nextmove .nm-txt { display: flex; gap: 9px; align-items: center; min-width: 0; }
+  .nextmove .nm-txt b { font-size: 11.5px; font-weight: 600; }
+  .nextmove .nm-txt p { margin: 1px 0 0; font-size: 10.5px; color: var(--muted); line-height: 1.4; }
+
+  /* planning */
+  .ringrow { display: flex; align-items: center; gap: 11px; margin-top: 8px; }
+  .ring { position: relative; width: 60px; height: 60px; flex: none; }
+  .ring .c { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 500; }
+  .obj { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+  .obj .o { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--muted); }
+  .obj .o b { font-weight: 500; color: var(--ink); white-space: nowrap; }
+
+  .act { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--hairline); align-items: center; font-size: 11px; }
+  .act:last-child { border-bottom: 0; }
+  .act .d { width: 34px; flex: none; text-align: center; background: var(--peri-soft); color: var(--peri-deep); border-radius: 6px; padding: 2px 0; font-size: 8.5px; font-weight: 500; line-height: 1.25; }
+  .act .d b { display: block; font-size: 11.5px; }
+  .act .t { flex: 1; min-width: 0; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .act .who { flex: none; width: 20px; height: 20px; border-radius: 999px; background: var(--peri); color: var(--peri-deeper); display: grid; place-items: center; font-size: 8.5px; font-weight: 700; }
+
+  footer { text-align: center; font-size: 9.5px; color: var(--hint); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside>
+    <div class="wordmark">SwissWiper <span class="collapse" title="Collapse sidebar">⟨⟨</span></div>
+    <div class="nav">
+      <div class="nav-label">Workspace</div>
+      <a href="#" class="compact"><span class="ic">▦</span>Overview</a>
+      <a href="#" class="compact"><span class="ic">✉</span>Emails</a>
+      <a href="#" class="compact"><span class="ic">▤</span>Calendar</a>
+      <a href="#" class="compact"><span class="ic">☑</span>Tasks</a>
+
+      <div class="nav-label" style="margin-top:6px">Marketing</div>
+      <a href="#" class="on"><span class="ic">▥</span>Executive summary</a>
+
+      <div class="nav-label">Channels</div>
+      <a href="#"><span class="ic" style="color:var(--s-linkedin)">●</span>LinkedIn</a>
+      <a href="#"><span class="ic" style="color:var(--s-instagram)">●</span>Instagram</a>
+      <a href="https://swisswiper.com" target="_blank" rel="noopener"><span class="ic">◍</span>Website<span class="live" style="color:var(--peri-deep)">↗</span></a>
+
+      <div class="nav-label">Planning</div>
+      <a href="#"><span class="ic">✎</span>Plan</a>
+      <a href="#"><span class="ic">≣</span>Pipeline</a>
+      <a href="#"><span class="ic">▤</span>Content calendar</a>
+
+      <div class="nav-label">Audience</div>
+      <a href="#"><span class="ic">◈</span>Audience</a>
+
+      <div class="nav-label">Conversations</div>
+      <a href="#"><span class="ic">◖</span>Engagement inbox</a>
+
+      <div class="nav-label">Reports</div>
+      <a href="#"><span class="ic">▣</span>Weekly report</a>
+    </div>
+    <div class="me"><span class="av">AM</span><div><b>Ali Mourad</b><span>Founder · CEO</span></div></div>
+  </aside>
+
+  <main><div class="wrap">
+
+    <div class="head">
+      <h1>Marketing<span>Everything across your channels — one glance</span></h1>
+      <div class="right">
+        <div class="toggle"><button>7d</button><button class="on">30d</button><button>365d</button></div>
+        <button class="cta">✦ &nbsp;Ask Alfred</button>
+      </div>
+    </div>
+
+    <!-- ZONE 1 · EXECUTIVE SUMMARY -->
+    <section class="zone">
+      <div class="zhead">
+        <div class="zt"><span class="znum">01</span><h2>Executive summary</h2><span class="zd">— the month in six numbers</span></div>
+        <span class="zctx">Last 30 days</span>
+      </div>
+      <div class="kpis">
+        <div class="card kpi"><div class="top"><span class="chip" style="background:var(--a-peri-bg);color:var(--a-peri)">❥</span><span class="lbl">Followers<br>all channels</span></div><span class="val">62</span><span class="delta">+41 this month</span><svg id="sp1"></svg></div>
+        <div class="card kpi"><div class="top"><span class="chip" style="background:var(--a-blue-bg);color:var(--a-blue)">◉</span><span class="lbl">Impressions<br>30 days</span></div><span class="val">1,918</span><span class="delta">+34%</span><svg id="sp2"></svg></div>
+        <div class="card kpi"><div class="top"><span class="chip" style="background:var(--a-teal-bg);color:var(--a-teal)">♥</span><span class="lbl">Engagement<br>rate</span></div><span class="val">10.4%</span><span class="delta">+1.2 pts</span><svg id="sp3"></svg></div>
+        <div class="card kpi"><div class="top"><span class="chip" style="background:var(--a-pink-bg);color:var(--a-pink)">◭</span><span class="lbl">Reach<br>Instagram 28d</span></div><span class="val">9</span><span class="delta flat">building</span><svg id="sp4"></svg></div>
+        <div class="card kpi"><div class="top"><span class="chip" style="background:var(--a-amber-bg);color:var(--a-amber)">⌂</span><span class="lbl">Page visits<br>30 days</span></div><span class="val">544</span><span class="delta">+22%</span><svg id="sp5"></svg></div>
+        <div class="card kpi"><div class="top"><span class="chip" style="background:var(--a-peri-bg);color:var(--a-peri)">✦</span><span class="lbl">Inquiries<br>commissions</span></div><span class="val">2</span><span class="delta">+2 this month</span><svg id="sp6"></svg></div>
+      </div>
+    </section>
+
+    <!-- ZONE 2 · PERFORMANCE -->
+    <section class="zone">
+      <div class="zhead">
+        <div class="zt"><span class="znum">02</span><h2>Performance</h2><span class="zd">— how those numbers came to be</span></div>
+        <a class="viewall" href="#">Channel dashboards →</a>
+      </div>
+
+      <div class="perfA">
+        <div class="card panel">
+          <div class="ph"><div><h3>Marketing funnel</h3><p class="sub">Awareness → inquiry · ends at commissions</p></div></div>
+          <div class="fwrap">
+            <div class="funnel">
+              <div class="fstage" style="--w:100%;background:var(--o1)">Impressions<small>1,927 · +34%</small></div>
+              <div class="fstage" style="--w:80%;background:var(--o2)">Engagements<small>201 · 10.4%</small></div>
+              <div class="fstage" style="--w:61%;background:var(--o3)">Page visits<small>544 · +22%</small></div>
+              <div class="fstage" style="--w:42%;background:var(--o4)">Profile visits<small>249</small></div>
+              <div class="fstage" style="--w:24%;background:var(--o5)">Inquiries<small>2 · new</small></div>
+            </div>
+          </div>
+          <p class="fnote">Impressions → inquiry: 0.10%</p>
+        </div>
+
+        <div class="card panel">
+          <div class="ph"><div><h3>Performance over time</h3><p class="sub">Daily impressions by channel · 30 days</p></div><a class="viewall" href="#">Details →</a></div>
+          <div class="legend"><span><i style="background:var(--s-linkedin)"></i>LinkedIn</span><span><i style="background:var(--s-instagram)"></i>Instagram</span></div>
+          <div class="chart-wrap"><svg id="mainchart" width="100%" height="128"></svg><div id="tooltip"></div></div>
+        </div>
+
+        <div class="card panel">
+          <div class="ph"><div><h3>Channel performance</h3><p class="sub">Only channels you run</p></div></div>
+          <table>
+            <thead><tr><th>Channel</th><th>Foll.</th><th>Eng.</th><th>Reach</th></tr></thead>
+            <tbody>
+              <tr><td><span class="ctile" style="background:var(--s-linkedin)">in</span>LinkedIn</td><td>38</td><td>10.4%</td><td>1,918</td></tr>
+              <tr><td><span class="ctile" style="background:var(--s-instagram)">◎</span>Instagram</td><td>24</td><td>8.3%</td><td>9</td></tr>
+              <tr class="soon"><td><span class="ctile" style="background:var(--peri)">◍</span>Website</td><td colspan="2">revamp soon</td><td><a class="viewall" href="https://swisswiper.com" target="_blank" rel="noopener">Visit ↗</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="perfB">
+        <div class="card panel">
+          <div class="ph"><div><h3>Top content</h3><p class="sub">By engagement</p></div></div>
+          <div style="margin-top:3px">
+            <div class="content-item"><span class="thumb">NEW BEST FRIEND</span><div class="t"><b>Mounted. Ready. Always.</b><span><span class="dot" style="background:var(--s-instagram)"></span>Instagram · 23 Apr</span></div><span class="m">4 ♥</span></div>
+            <div class="content-item"><span class="thumb alt">STILL CLEAR</span><div class="t"><b>Hard water doesn’t negotiate.</b><span><span class="dot" style="background:var(--s-linkedin)"></span>LinkedIn · 18 Apr</span></div><span class="m">12.4%</span></div>
+          </div>
+        </div>
+
+        <div class="card panel">
+          <div class="ph"><div><h3>Format performance</h3><p class="sub">Avg eng. / post · IG</p></div></div>
+          <div class="hbar"><span class="n">Image</span><div class="track"><div class="fill" style="width:78%"></div></div><span class="v">2.3</span></div>
+          <div class="hbar"><span class="n">Carousel</span><div class="track"></div><span class="v soon">—</span></div>
+          <div class="hbar"><span class="n">Reel</span><div class="track"></div><span class="v soon">—</span></div>
+          <div class="hbar"><span class="n">Story</span><div class="track"></div><span class="v soon">—</span></div>
+        </div>
+
+        <div class="card panel">
+          <div class="ph"><div><h3>Conversations</h3><p class="sub">Every reply human-approved</p></div></div>
+          <div class="statgrid">
+            <div class="stat"><span class="v" style="color:var(--good)">100%</span><span class="l">answered</span></div>
+            <div class="stat"><span class="v">2.1h</span><span class="l">median reply</span></div>
+            <div class="stat"><span class="v">0</span><span class="l">awaiting</span></div>
+            <div class="stat"><span class="v">3</span><span class="l">this week</span></div>
+          </div>
+        </div>
+
+        <div class="card panel">
+          <div class="ph"><div><h3>Publishing health</h3><p class="sub">This month · IG</p></div></div>
+          <div class="ops">
+            <div><b>3</b><span>scheduled</span></div>
+            <div class="ok"><b>2</b><span>published</span></div>
+            <div><b>0</b><span>failed</span></div>
+          </div>
+          <div class="hbar" style="margin-top:9px"><span class="n">Cadence</span><div class="track"><div class="fill" style="width:50%"></div></div><span class="v">4/8</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ZONE 3 + ZONE 4 side by side -->
+    <div class="zsplit">
+      <section class="zone">
+        <div class="zhead">
+          <div class="zt"><span class="znum">03</span><h2>Alfred’s insight</h2><span class="zd">— his read on the numbers</span></div>
+          <a class="viewall" href="#">View all →</a>
+        </div>
+        <div class="insights">
+          <div class="card insight"><span class="chip" style="background:var(--a-pink-bg);color:var(--a-pink)">◪</span><div><b>Image tiles carry Instagram</b><span>2.3 eng./post — the only format with data. Test a carousel.</span></div></div>
+          <div class="card insight"><span class="chip" style="background:var(--a-blue-bg);color:var(--a-blue)">▲</span><div><b>LinkedIn engagement is exceptional</b><span>10.4% — several times the norm at this size.</span></div></div>
+          <div class="card insight"><span class="chip" style="background:var(--a-peri-bg);color:var(--a-peri)">◈</span><div><b>1 in 3 followers decides</b><span>33% are director-level or above. Protect this ratio.</span></div></div>
+          <div class="card insight"><span class="chip" style="background:var(--a-amber-bg);color:var(--a-amber)">◷</span><div><b>Publish window set to 11:30</b><span>Your strongest posting window. Auto-publish aligned.</span></div></div>
+        </div>
+        <div class="card nextmove">
+          <div class="nm-txt"><span class="chip" style="background:var(--a-peri-bg);color:var(--a-peri)">✦</span><div><b>Alfred’s next move</b><p>August is thin — 4 of 8 posts planned. Draft the month around what performed?</p></div></div>
+          <button class="cta sm">✦ &nbsp;Plan August</button>
+        </div>
+      </section>
+
+      <section class="zone">
+        <div class="zhead">
+          <div class="zt"><span class="znum">04</span><h2>Planning</h2><span class="zd">— progress &amp; what’s next</span></div>
+          <a class="viewall" href="#">Full plan →</a>
+        </div>
+        <div class="card panel">
+          <div class="ringrow" style="margin-top:2px">
+            <div class="ring"><svg id="ring1" width="60" height="60" viewBox="0 0 84 84"></svg><span class="c">44%</span></div>
+            <div class="obj">
+              <div class="o"><span>Posts vs cadence</span><b>7 / 12</b></div>
+              <div class="o"><span>Awareness · Founder · Proof</span><b>4 · 2 · 1</b></div>
+              <div class="o"><span>Decision-makers reached</span><b>12 of 36</b></div>
+            </div>
+          </div>
+          <div style="margin-top:9px;border-top:1px solid var(--hairline);padding-top:7px">
+            <div class="act"><span class="d">JUL<b>23</b></span><span class="t"><span class="dot" style="background:var(--s-instagram)"></span>Connected to Alfred — announcement</span><span class="who">AM</span></div>
+            <div class="act"><span class="d">JUL<b>25</b></span><span class="t"><span class="dot" style="background:var(--s-linkedin)"></span>The cost of doing nothing</span><span class="who">AM</span></div>
+            <div class="act"><span class="d">JUL<b>28</b></span><span class="t"><span class="dot" style="background:var(--s-instagram)"></span>Behind the engineering — v2 carousel</span><span class="who">EM</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer>SwissWiper visual system · UI direction v6 · single-canvas cockpit — real numbers at current scale</footer>
+  </div></main>
+</div>
+
+<script>
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function sparkline(id, data, color) {
+  const svg = document.getElementById(id);
+  const w = svg.clientWidth || 140, h = 16, max = Math.max(...data, 1);
+  const pts = data.map((v, i) => [i * (w / (data.length - 1)), h - 2 - (v / max) * (h - 5)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = line + ` L${w},${h} L0,${h} Z`;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.innerHTML =
+    `<path d="${area}" fill="${color}" opacity="0.10"></path>` +
+    `<path d="${line}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round"></path>` +
+    `<circle cx="${pts[pts.length-1][0]}" cy="${pts[pts.length-1][1]}" r="2.2" fill="${color}"></circle>`;
+}
+sparkline('sp1', [21,24,28,31,38,44,52,62], css('--a-peri'));
+sparkline('sp2', [40,55,48,80,95,74,120,150,132,174], css('--a-blue'));
+sparkline('sp3', [6.1,7.4,8.2,7.9,9.1,9.8,10.4], css('--a-teal'));
+sparkline('sp4', [0,1,1,2,3,3,4,9], css('--a-pink'));
+sparkline('sp5', [12,18,25,22,30,41,38,54], css('--a-amber'));
+sparkline('sp6', [0,0,0,1,1,1,2,2], css('--a-peri'));
+
+(function () {
+  const svg = document.getElementById('mainchart');
+  const tt = document.getElementById('tooltip');
+  const W = svg.clientWidth || 460, H = 128, P = { l: 28, r: 10, t: 10, b: 18 };
+  const days = 30;
+  const li = [38,52,41,60,74,55,88,64,92,70,58,95,110,84,72,120,98,76,132,105,88,140,118,96,150,124,102,160,138,174];
+  const ig  = [0,0,1,0,2,1,0,3,1,2,4,2,1,5,3,2,6,4,3,8,5,4,9,6,5,11,8,6,12,9];
+  const max = 180;
+  const x = (i) => P.l + i * ((W - P.l - P.r) / (days - 1));
+  const y = (v) => P.t + (1 - v / max) * (H - P.t - P.b);
+  const path = (d) => d.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const cL = css('--s-linkedin'), cI = css('--s-instagram');
+  let grid = '';
+  [0, 90, 180].forEach((v) => {
+    grid += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(11,11,15,0.06)"></line>` +
+            `<text x="${P.l - 6}" y="${y(v) + 3}" text-anchor="end" font-size="8.5" fill="#9A9BA4">${v}</text>`;
+  });
+  const labels = [[0,'Jun 22'],[14,'Jul 6'],[29,'Jul 21']]
+    .map(([i, t]) => `<text x="${x(i)}" y="${H - 4}" text-anchor="middle" font-size="8.5" fill="#9A9BA4">${t}</text>`).join('');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = grid + labels +
+    `<path d="${path(li)}" fill="none" stroke="${cL}" stroke-width="1.8" stroke-linejoin="round"></path>` +
+    `<path d="${path(ig)}" fill="none" stroke="${cI}" stroke-width="1.8" stroke-linejoin="round"></path>` +
+    `<line id="xh" y1="${P.t}" y2="${H - P.b}" stroke="rgba(11,11,15,0.18)" stroke-dasharray="3 3" opacity="0"></line>` +
+    `<circle id="d1" r="3.2" fill="${cL}" stroke="#fff" stroke-width="1.8" opacity="0"></circle>` +
+    `<circle id="d2" r="3.2" fill="${cI}" stroke="#fff" stroke-width="1.8" opacity="0"></circle>`;
+  const xh = svg.querySelector('#xh'), d1 = svg.querySelector('#d1'), d2 = svg.querySelector('#d2');
+  const dateOf = (i) => { const d = new Date(2026, 5, 22); d.setDate(d.getDate() + i); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+  svg.addEventListener('mousemove', (e) => {
+    const r = svg.getBoundingClientRect();
+    const mx = ((e.clientX - r.left) / r.width) * W;
+    const i = Math.max(0, Math.min(days - 1, Math.round((mx - P.l) / ((W - P.l - P.r) / (days - 1)))));
+    xh.setAttribute('x1', x(i)); xh.setAttribute('x2', x(i)); xh.setAttribute('opacity', 1);
+    d1.setAttribute('cx', x(i)); d1.setAttribute('cy', y(li[i])); d1.setAttribute('opacity', 1);
+    d2.setAttribute('cx', x(i)); d2.setAttribute('cy', y(ig[i])); d2.setAttribute('opacity', 1);
+    tt.style.opacity = 1;
+    tt.style.left = Math.min((e.clientX - r.left) + 12, r.width - 130) + 'px';
+    tt.style.top = ((e.clientY - r.top) - 40) + 'px';
+    tt.innerHTML = `<span class="t">${dateOf(i)}</span><br>LinkedIn ${li[i]} · Instagram ${ig[i]}`;
+  });
+  svg.addEventListener('mouseleave', () => { tt.style.opacity = 0; xh.setAttribute('opacity', 0); d1.setAttribute('opacity', 0); d2.setAttribute('opacity', 0); });
+})();
+
+function ring(id, pct) {
+  const svg = document.getElementById(id);
+  const R = 34, C = 2 * Math.PI * R;
+  svg.innerHTML =
+    `<circle cx="42" cy="42" r="${R}" fill="none" stroke="#EEF1F8" stroke-width="9"></circle>` +
+    `<circle cx="42" cy="42" r="${R}" fill="none" stroke="${css('--peri-deep')}" stroke-width="9" stroke-linecap="round"` +
+    ` stroke-dasharray="${(C * pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 42 42)"></circle>`;
+}
+ring('ring1', 0.44);
+</script>
+</body>
+</html>

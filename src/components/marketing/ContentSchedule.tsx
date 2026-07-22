@@ -28,8 +28,6 @@ function fmtDate(d: string): string {
 const CHANNEL_URL: Record<string, string> = {
   linkedin: "https://www.linkedin.com/feed/",
   instagram: "https://www.instagram.com/",
-  tiktok: "https://www.tiktok.com/upload",
-  youtube: "https://studio.youtube.com/",
   website: "",
 };
 function pad(n: number) {
@@ -353,7 +351,6 @@ export default function ContentSchedule({
               onBodyChange={bodyChange}
               onBodySave={bodySave}
               onDelete={remove}
-              onLocalPatch={patch}
               isFounder={isFounder}
             />
           );

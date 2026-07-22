@@ -16,6 +16,8 @@ export type Channel = {
   name: string;
   status: "live" | "soon";
   icon: ReactNode;
+  /** External link (e.g. the live website) — makes the channel row clickable out. */
+  href?: string;
 };
 
 export const channels: Channel[] = [
@@ -43,30 +45,10 @@ export const channels: Channel[] = [
     ),
   },
   {
-    key: "tiktok",
-    name: "TikTok",
-    status: "soon",
-    icon: (
-      <svg {...p} aria-hidden="true">
-        <path d="M10 9a4 4 0 1 0 4 4V4c.5 2 2 3.5 4 3.8" />
-      </svg>
-    ),
-  },
-  {
-    key: "youtube",
-    name: "YouTube",
-    status: "soon",
-    icon: (
-      <svg {...p} aria-hidden="true">
-        <rect x="3" y="6" width="18" height="12" rx="3" />
-        <path d="m11 9 4 3-4 3V9Z" />
-      </svg>
-    ),
-  },
-  {
     key: "website",
     name: "Website",
     status: "soon",
+    href: "https://swisswiper.com/",
     icon: (
       <svg {...p} aria-hidden="true">
         <circle cx="12" cy="12" r="9" />

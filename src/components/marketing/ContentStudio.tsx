@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
-import { setInstagramPublish, publishNow, updatePost } from "@/lib/marketing/schedule-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
@@ -20,8 +19,6 @@ function channelName(key: string): string {
 const CHAR_LIMIT: Record<string, number> = {
   linkedin: 3000,
   instagram: 2200,
-  tiktok: 2200,
-  youtube: 5000,
   website: 0,
 };
 
@@ -44,7 +41,6 @@ export default function ContentStudio({
   onBodyChange,
   onBodySave,
   onDelete,
-  onLocalPatch,
   isFounder = false,
 }: {
   post: ContentPost;
@@ -57,7 +53,6 @@ export default function ContentStudio({
   onBodyChange: (id: string, b: string) => void;
   onBodySave: (id: string, b: string) => void;
   onDelete: (id: string) => void;
-  onLocalPatch: (id: string, p: Partial<ContentPost>) => void;
   isFounder?: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>([
@@ -81,8 +76,6 @@ export default function ContentStudio({
   const [genSize, setGenSize] = useState("2K");
   const [genCount, setGenCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<"choose" | "upload" | "create">("choose");
-  const [publishingNow, setPublishingNow] = useState(false);
-  const [confirmPub, setConfirmPub] = useState(false);
   const [genKind, setGenKind] = useState<"image" | "video">("image");
   const [genSource, setGenSource] = useState<"text" | "image">("text");
   const [genSourceId, setGenSourceId] = useState<string | null>(null);
@@ -99,41 +92,6 @@ export default function ContentStudio({
   const chatRef = useRef<HTMLTextAreaElement>(null);
 
   const images = media.filter((m) => m.kind === "image");
-  const igVideos = media.filter((m) => m.kind === "video");
-
-  // Per-format readiness for Instagram publishing (null = ready to publish).
-  const igFormat =
-    (post.format || "").toLowerCase() ||
-    (igVideos.length && !images.length ? "reel" : images.length > 1 ? "carousel" : "post");
-  const igPublishTime = post.publish_at
-    ? (() => {
-        const d = new Date(post.publish_at as string);
-        const p2 = (n: number) => String(n).padStart(2, "0");
-        return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
-      })()
-    : "11:30";
-  const igBlocker: string | null =
-    igFormat === "story"
-      ? images.length || igVideos.length
-        ? null
-        : "a Story needs an image or video"
-      : igFormat === "carousel"
-        ? images.length < 2
-          ? "a carousel needs at least 2 images"
-          : post.body.trim()
-            ? null
-            : "write the caption first"
-        : igFormat === "reel" || igFormat === "video"
-          ? !igVideos.length
-            ? "a Reel needs a video"
-            : post.body.trim()
-              ? null
-              : "write the caption first"
-          : !images.length && !igVideos.length
-            ? "add an image first"
-            : post.body.trim()
-              ? null
-              : "write the caption first";
 
   // Load attached media when the studio opens.
   useEffect(() => {
@@ -172,27 +130,6 @@ export default function ContentStudio({
       setAutoDrafting(false);
     })();
   }, [post.id, post.seed_idea, post.body, post.title, post.channel, onBodyChange, onBodySave]);
-
-  async function doPublishNow() {
-    setConfirmPub(false);
-    setPublishingNow(true);
-    try {
-      const r = await publishNow(post.id);
-      if (r.ok) {
-        onLocalPatch(post.id, {
-          status: "published",
-          publish_status: "published",
-          external_permalink: r.permalink ?? null,
-          publish_error: null,
-        });
-      } else {
-        onLocalPatch(post.id, { publish_status: "failed", publish_error: r.error ?? "Publishing failed." });
-      }
-    } catch {
-      onLocalPatch(post.id, { publish_status: "failed", publish_error: "Publishing failed — try again." });
-    }
-    setPublishingNow(false);
-  }
 
   async function uploadFiles(files: FileList) {
     setUploading(true);
@@ -472,144 +409,6 @@ export default function ContentStudio({
                   ? "📅 On your Google Calendar — planning, drafting & publish-day reminders are set."
                   : "📅 Scheduling adds planning, drafting & publish-day reminders to your Google Calendar."}
               </p>
-            )}
-
-            {/* Instagram auto-publish + publish-now */}
-            {post.channel === "instagram" && (
-              <div className="flex flex-col gap-3 rounded-[var(--radius-control)] border border-hairline bg-bg px-4 py-3">
-                {post.publish_status === "published" ? (
-                  <p className="text-xs text-emerald-700">
-                    Published to Instagram
-                    {post.external_permalink && (
-                      <>
-                        {" · "}
-                        <a
-                          href={post.external_permalink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium underline"
-                        >
-                          View the live post ↗
-                        </a>
-                      </>
-                    )}
-                  </p>
-                ) : post.publish_status === "publishing" || publishingNow ? (
-                  <p className="text-xs text-peri-deep">Publishing to Instagram…</p>
-                ) : (
-                  <>
-                    {post.publish_status === "failed" && (
-                      <p className="text-xs text-red-600">
-                        Last attempt failed — {post.publish_error || "unknown error."}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                      <span className="font-medium text-ink">Format</span>
-                      <select
-                        value={post.format || ""}
-                        onChange={(e) => {
-                          onLocalPatch(post.id, { format: e.target.value });
-                          void updatePost(post.id, { format: e.target.value });
-                        }}
-                        className="rounded-full border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
-                      >
-                        <option value="">Auto (from media)</option>
-                        <option value="post">Feed post — 1 image</option>
-                        <option value="carousel">Carousel — 2–10 images</option>
-                        <option value="story">Story — image or video</option>
-                        <option value="reel">Reel — video</option>
-                      </select>
-                      {igFormat === "story" && (
-                        <span className="text-[11px] text-hint">Stories don&apos;t carry captions on Instagram</span>
-                      )}
-                    </div>
-                    <label className="flex cursor-pointer items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(post.auto_publish)}
-                        onChange={(e) => {
-                          onLocalPatch(post.id, { auto_publish: e.target.checked });
-                          void setInstagramPublish(post.id, { autoPublish: e.target.checked });
-                        }}
-                        className="mt-0.5 accent-[#5C66A6]"
-                      />
-                      <span className="text-xs text-muted">
-                        <span className="font-medium text-ink">Auto-publish to Instagram</span> — goes live late
-                        morning on the scheduled day. Needs the caption written, the format&apos;s media attached,
-                        and a scheduled date.
-                      </span>
-                    </label>
-                    {Boolean(post.auto_publish) && (
-                      <label className="flex items-center gap-2 pl-6 text-xs text-muted">
-                        at
-                        <input
-                          type="time"
-                          value={igPublishTime}
-                          disabled={!post.scheduled_for}
-                          onChange={(e) => {
-                            const t = e.target.value || "11:30";
-                            if (!post.scheduled_for) return;
-                            const iso = new Date(`${post.scheduled_for}T${t}`).toISOString();
-                            onLocalPatch(post.id, { publish_at: iso });
-                            void setInstagramPublish(post.id, { publishAt: iso });
-                          }}
-                          className="rounded-full border border-hairline bg-surface px-2 py-1 text-xs text-muted focus:outline-none"
-                        />
-                        <span className="text-[11px] text-hint">
-                          {post.scheduled_for
-                            ? "earliest publish moment on the scheduled day"
-                            : "set a date first"}
-                        </span>
-                      </label>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2">
-                      {confirmPub ? (
-                        <>
-                          <span className="text-xs text-muted">Post this to @swisswiper right now?</span>
-                          <button
-                            type="button"
-                            onClick={() => void doPublishNow()}
-                            className="rounded-full bg-peri-deep px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4d5793]"
-                          >
-                            Yes — publish now
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmPub(false)}
-                            className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmPub(true)}
-                            disabled={Boolean(igBlocker)}
-                            className="rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-peri-deep transition-colors hover:border-peri-deep disabled:opacity-50"
-                          >
-                            Publish to Instagram now
-                          </button>
-                          {igBlocker && <span className="text-[11px] text-hint">{igBlocker}</span>}
-                          {post.publish_status === "failed" && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onLocalPatch(post.id, { publish_status: null, publish_error: null });
-                                void setInstagramPublish(post.id, { reset: true });
-                              }}
-                              className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-ink"
-                            >
-                              Clear error
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
             )}
 
             <textarea

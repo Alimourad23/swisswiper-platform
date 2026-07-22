@@ -13,8 +13,6 @@ export type Cadence = {
 export const CADENCE: Record<string, Cadence> = {
   linkedin: { days: [2, 3, 4], time: "10:00", perMonth: 12, note: "Tue–Thu mornings · ~3/week" },
   instagram: { days: [1, 2, 3, 4, 5], time: "11:00", perMonth: 16, note: "Weekdays · ~4/week" },
-  tiktok: { days: [0, 1, 2, 3, 4, 5, 6], time: "19:00", perMonth: 20, note: "Most days, evenings · ~5/week" },
-  youtube: { days: [4, 5, 6], time: "15:00", perMonth: 4, note: "Thu–Sat afternoons · ~1/week" },
   website: { days: [2, 3], time: "10:00", perMonth: 2, note: "Mid-week · ~2/month" },
 };
 

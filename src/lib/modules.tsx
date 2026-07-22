@@ -101,9 +101,9 @@ export const modules: ModuleDef[] = [
   {
     slug: "marketing",
     name: "Marketing",
-    subtitle: "LinkedIn, Instagram and TikTok performance.",
+    subtitle: "LinkedIn and Instagram performance.",
     icon: icons.marketing,
-    status: "soon",
+    status: "live",
   },
   {
     slug: "sales",
@@ -160,8 +160,6 @@ export const founderNav: NavItem[] = [
       { name: "Pipeline", href: "/dashboard/marketing/pipeline" },
       { name: "Calendar", href: "/dashboard/marketing/calendar" },
       { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
-      { name: "Instagram", href: "/dashboard/marketing/instagram" },
-      { name: "Engagement", href: "/dashboard/marketing/engagement" },
     ],
   },
 ];

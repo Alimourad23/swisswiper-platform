@@ -3,7 +3,7 @@
    `monthly-actions.ts`. */
 
 export type MonthSuggestion = {
-  channel: string; // linkedin | instagram | tiktok | youtube | website
+  channel: string; // linkedin | instagram | website
   title: string; // short hook / working title
   idea: string; // one-line description of the post
   day: number; // 1–28, day of the target month (fallback)
