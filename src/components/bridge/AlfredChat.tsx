@@ -13,7 +13,7 @@ import type { TaskPriority, TaskStatus, TaskVisibility } from "@/lib/tasks/types
 import ActionPanel, { type PanelOption } from "@/components/bridge/ActionPanel";
 import TaskReview, { type TaskDraft } from "@/components/bridge/TaskReview";
 import PostReview, { type PostDraft } from "@/components/bridge/PostReview";
-import { createPost } from "@/lib/marketing/schedule-actions";
+import { createPostsBulk } from "@/lib/marketing/schedule-actions";
 import EmailReview, { type EmailDraftState } from "@/components/bridge/EmailReview";
 import EventReview, {
   type EventDraftState,
@@ -555,14 +555,16 @@ export default function AlfredChat({
     setPostDraft(null);
     setBusy(true);
     try {
-      const r = await createPost({
-        title: d.title.trim(),
-        channel: d.channel,
-        scheduledFor: d.date || null,
-        seedIdea: d.seedIdea.trim() || undefined,
-        goal: d.goal || undefined,
-        source: "alfred",
-      });
+      const r = await createPostsBulk([
+        {
+          title: d.title.trim(),
+          channel: d.channel,
+          scheduledFor: d.date || "",
+          seedIdea: d.seedIdea.trim() || undefined,
+          goal: d.goal || undefined,
+          source: "alfred",
+        },
+      ]);
       if (r.ok) {
         finishWithResult(
           `Done — “${d.title.trim()}” is in the marketing pipeline${

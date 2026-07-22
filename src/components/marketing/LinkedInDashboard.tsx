@@ -22,9 +22,10 @@ import type { Objective } from "@/lib/marketing/okr";
    Alfred's read are constant. Every number is from the weekly export. */
 
 type Engager = { id: string; name: string; note: string | null };
+export type PlannedPost = { title: string; scheduled_for: string | null; status: string; format: string };
 type Props = {
   metrics: LinkedInMetrics; inquiries: number; source: string; capturedAt: string;
-  engagers: Engager[]; section?: string; objectives?: Objective[];
+  engagers: Engager[]; section?: string; objectives?: Objective[]; planned?: PlannedPost[];
 };
 
 function delta(cur: number, prev: number): { text: string; good: boolean } | null {
@@ -78,8 +79,9 @@ function downloadHtml(filename: string, html: string) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
-export default function LinkedInDashboard({ metrics, inquiries, source, capturedAt, engagers, section = "overview", objectives }: Props) {
+export default function LinkedInDashboard({ metrics, inquiries, source, capturedAt, engagers, section = "overview", objectives, planned = [] }: Props) {
   const [days, setDays] = useState(365);
+  const [cWin, setCWin] = useState(365); // Content timeline filter (days; 0 = all)
   const a = windowAgg(metrics, days);
   const dm = decisionMakerShare(metrics);
   const byType = contentTypeBreakdown(metrics.posts ?? []);
@@ -99,6 +101,24 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
   const demo = metrics.demographics;
   const capDate = (() => { try { return new Date(capturedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return capturedAt; } })();
   const windowLabel = days === 365 ? "12 months" : `${days} days`;
+
+  // Content section: full post list filtered by its own timeline trigger + planned posts.
+  const fmtDay = (s: string) => { try { return new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short" }); } catch { return s; } };
+  const cCut = cWin > 0 ? Date.now() - cWin * 86_400_000 : 0;
+  const allPosts = [...(metrics.posts ?? [])]
+    .filter((p) => !cCut || (p.created && new Date(p.created).getTime() >= cCut))
+    .sort((x, y) => (x.created < y.created ? 1 : -1));
+  const upcoming = [...planned]
+    .filter((p) => p.status !== "published")
+    .sort((x, y) => (x.scheduled_for ?? "").localeCompare(y.scheduled_for ?? ""));
+
+  const timeline = (
+    <div className="mc-toggle">
+      {[90, 365, 0].map((w) => (
+        <button key={w} className={w === cWin ? "on" : ""} onClick={() => setCWin(w)}>{w === 0 ? "All" : w === 365 ? "12mo" : w + "d"}</button>
+      ))}
+    </div>
+  );
 
   const kpiRow = (
     <div className="mc-kpis k5">
@@ -203,6 +223,35 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
     </div>
   );
 
+  const allPostsCard = (
+    <div className="mc-card mc-panel">
+      <div className="mc-ph"><div><h3>All posts</h3><p className="mc-sub">{allPosts.length} in window · newest first</p></div></div>
+      <div style={{ marginTop: 3, maxHeight: 360, overflowY: "auto" }}>
+        {allPosts.length ? allPosts.map((p, i) => (
+          <div key={i} className="mc-content">
+            <span className={"mc-thumb" + (p.contentType === "Video" ? "" : " alt")}>{(p.contentType || "POST").slice(0, 10)}</span>
+            <div className="mc-ct"><b>{p.title || "(untitled)"}</b><span>{p.created ? fmtDay(p.created) + " · " : ""}{fmt(p.impressions)} impressions · {fmt(p.likes)} reactions · {pct1(p.ctr)} CTR</span></div>
+            {p.link ? <a className="mc-viewall" href={p.link} target="_blank" rel="noopener noreferrer">Open ↗</a> : null}
+          </div>
+        )) : <p className="mc-soft" style={{ fontSize: 11 }}>No posts in this window — widen the timeline, or upload a fresh export.</p>}
+      </div>
+    </div>
+  );
+
+  const plannedCard = (
+    <div className="mc-card mc-panel">
+      <div className="mc-ph"><div><h3>Planned &amp; upcoming</h3><p className="mc-sub">From your pipeline</p></div><a className="mc-viewall" href="/dashboard/marketing/pipeline">Pipeline →</a></div>
+      <div style={{ marginTop: 3 }}>
+        {upcoming.length ? upcoming.slice(0, 8).map((p, i) => (
+          <div key={i} className="mc-content">
+            <span className="mc-thumb alt">{(p.format || "PLAN").slice(0, 8).toUpperCase()}</span>
+            <div className="mc-ct"><b>{p.title || "(untitled)"}</b><span>{p.scheduled_for ? fmtDay(p.scheduled_for) : "unscheduled"} · {p.status}</span></div>
+          </div>
+        )) : <p className="mc-soft" style={{ fontSize: 11 }}>Nothing planned yet — add posts in the pipeline and they’ll show here.</p>}
+      </div>
+    </div>
+  );
+
   function report() {
     const rows = [
       ["New followers", fmt(a.newFollowers)], ["Impressions", fmt(a.impressions)],
@@ -224,11 +273,28 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
   const body = (() => {
     switch (section) {
       case "content":
-        return <section className="mc-zone"><Head n="02" title="Content" note="posts and formats" /><div className="mc-split">{topContentCard(6)}{formatCard}</div></section>;
+        return (
+          <section className="mc-zone">
+            <Head n="02" title="Content" note="everything posted & planned" ctx={timeline} />
+            {plannedCard}
+            <div className="mc-split" style={{ marginTop: 11 }}>
+              {allPostsCard}
+              <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{topContentCard(5)}{formatCard}</div>
+            </div>
+          </section>
+        );
       case "analytics":
-        return <section className="mc-zone"><Head n="02" title="Analytics" note="funnel and trend" />{kpiRow}<div className="mc-g2" style={{ marginTop: 3 }}>{funnelCard}{trendCard}</div></section>;
-      case "audience":
-        return <section className="mc-zone"><Head n="03" title="Audience" note="who is following" /><div className="mc-split">{demoGrid}<div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{decisionCard}{engagersCard}</div></div></section>;
+        return (
+          <section className="mc-zone">
+            <Head n="02" title="Analytics" note="performance & audience" />
+            {kpiRow}
+            <div className="mc-g2" style={{ marginTop: 3 }}>{funnelCard}{trendCard}</div>
+            <div className="mc-split" style={{ marginTop: 11 }}>
+              {demoGrid}
+              <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{decisionCard}{engagersCard}</div>
+            </div>
+          </section>
+        );
       case "reports":
         return (
           <section className="mc-zone">

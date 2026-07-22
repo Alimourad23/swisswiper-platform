@@ -33,11 +33,6 @@ export async function createPost(input: {
   status?: ContentStatus;
   scheduledFor?: string | null;
   format?: string;
-  /** One-line creative brief — the Studio auto-drafts the caption from it. */
-  seedIdea?: string;
-  goal?: string;
-  /** Where the post came from: manual | alfred. */
-  source?: string;
 }): Promise<{ ok: boolean; id?: string }> {
   const c = await uid();
   if (!c) return { ok: false };
@@ -52,9 +47,6 @@ export async function createPost(input: {
       status: input.status ?? (input.scheduledFor ? "scheduled" : "idea"),
       scheduled_for: input.scheduledFor ?? null,
       format: input.format ?? "",
-      seed_idea: input.seedIdea ?? null,
-      goal: input.goal ?? null,
-      source: input.source ?? "manual",
     })
     .select("id")
     .single();
@@ -136,4 +128,15 @@ export async function publishInstagramNow(
   const res = await publishSingleInstagramPost(c.supabase, postId);
   revalidatePath("/dashboard/marketing");
   return res;
+}
+
+/* Upcoming (not-yet-published) posts for one channel — feeds the "Planned &
+   upcoming" panel on each channel's Content page. */
+export async function getPlannedFor(
+  channel: string,
+): Promise<{ title: string; scheduled_for: string | null; status: string; format: string }[]> {
+  const posts = await getContentPosts();
+  return posts
+    .filter((p) => p.channel === channel && p.status !== "published")
+    .map((p) => ({ title: p.title, scheduled_for: p.scheduled_for, status: p.status, format: p.format }));
 }

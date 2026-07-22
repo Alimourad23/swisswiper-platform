@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import InstagramDashboard from "@/components/marketing/InstagramDashboard";
 import { getInstagramAnalytics } from "@/lib/marketing/instagram-data";
 import { instagramObjectives } from "@/lib/marketing/channel-okr";
+import { getPlannedFor } from "@/lib/marketing/schedule-actions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,6 +36,9 @@ async function Data({ params }: { params: Promise<{ section: string }> }) {
     );
   }
 
-  const objectives = await instagramObjectives(data.followers, data.reach28);
-  return <InstagramDashboard data={data} section={section} objectives={objectives} />;
+  const [objectives, planned] = await Promise.all([
+    instagramObjectives(data.followers, data.reach28),
+    getPlannedFor("instagram"),
+  ]);
+  return <InstagramDashboard data={data} section={section} objectives={objectives} planned={planned} />;
 }

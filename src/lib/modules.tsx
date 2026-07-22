@@ -204,8 +204,9 @@ const SECTION_LABELS: Record<SectionKey, string> = {
 /* Sections are channel-appropriate — only what's relevant to each medium.
    Stories/Reels/Hashtags are Instagram-only; they never appear on LinkedIn. */
 export const CHANNEL_SECTION_KEYS: Record<string, SectionKey[]> = {
-  linkedin: ["overview", "content", "analytics", "audience", "engagement", "competitors", "campaigns", "reports"],
-  instagram: ["overview", "content", "analytics", "audience", "engagement", "stories", "reels", "hashtags", "competitors", "campaigns", "reports"],
+  // Audience is folded into Analytics (it's an analytic) — one banner, no separate tab.
+  linkedin: ["overview", "content", "analytics", "engagement", "competitors", "campaigns", "reports"],
+  instagram: ["overview", "content", "analytics", "engagement", "stories", "reels", "hashtags", "competitors", "campaigns", "reports"],
 };
 
 function sectionsFor(channel: string): NavChild[] {

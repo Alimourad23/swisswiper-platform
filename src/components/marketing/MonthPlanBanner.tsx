@@ -15,8 +15,14 @@ import { recommendedCount } from "@/lib/marketing/cadence";
 
 type Item = MonthSuggestion & { date: string; selected: boolean };
 
+// Only the channels we actually run — hides any stale TikTok/YouTube suggestions
+// that were stored before the plan was narrowed to our live mediums.
+const LIVE_CHANNELS = new Set(channels.map((c) => c.key));
+
 function toItems(plan: MonthPlan): Item[] {
-  return plan.suggestions.map((s) => ({ ...s, date: s.date ?? dateForDay(plan.month, s.day), selected: true }));
+  return plan.suggestions
+    .filter((s) => LIVE_CHANNELS.has(s.channel))
+    .map((s) => ({ ...s, date: s.date ?? dateForDay(plan.month, s.day), selected: true }));
 }
 function channelName(key: string): string {
   return channels.find((c) => c.key === key)?.name ?? key;

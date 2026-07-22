@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { COCKPIT_CSS, Spark, SectionPlaceholder, fmt } from "./cockpit-ui";
 import { InstagramLogo } from "./logos";
 import Objectives from "./Objectives";
 import CreatePostButton from "./CreatePostButton";
 import type { Objective } from "@/lib/marketing/okr";
+
+export type PlannedPost = { title: string; scheduled_for: string | null; status: string; format: string };
 
 /* The Instagram channel dashboard. Overview is a complete executive summary of
    the account; each sub-section is the deep-dive. Live from the Instagram API;
@@ -29,7 +32,7 @@ const fmtDate = (iso: string) => {
 };
 const typeName = (t: string) => (t === "VIDEO" ? "Reel" : t === "CAROUSEL_ALBUM" ? "Carousel" : "Image");
 
-function Head({ n, title, note, ctx }: { n: string; title: string; note?: string; ctx?: string }) {
+function Head({ n, title, note, ctx }: { n: string; title: string; note?: string; ctx?: React.ReactNode }) {
   return (
     <div className="mc-zhead">
       <div className="mc-zt"><span className="mc-znum">{n}</span><h2>{title}</h2>{note ? <span className="mc-zd">— {note}</span> : null}</div>
@@ -56,7 +59,8 @@ function downloadHtml(filename: string, html: string) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
-export default function InstagramDashboard({ data, section = "overview", objectives }: { data: IgData; section?: string; objectives?: Objective[] }) {
+export default function InstagramDashboard({ data, section = "overview", objectives, planned = [] }: { data: IgData; section?: string; objectives?: Objective[]; planned?: PlannedPost[] }) {
+  const [cWin, setCWin] = useState(365); // Content timeline filter (days; 0 = all)
   const kpis: { label: string; value: string; note?: string }[] = [
     { label: "Followers", value: fmt(data.followers), note: growthNote(data) },
     { label: "Posts", value: fmt(data.mediaCount) },
@@ -88,6 +92,71 @@ export default function InstagramDashboard({ data, section = "overview", objecti
     : formats.length
       ? `${formats[0].type} posts lead engagement (${formats[0].avg.toFixed(1)} avg). ${data.reach28 !== null ? `28-day reach is ${fmt(data.reach28)}` : "Reach builds as you post"} — keep the cadence steady and lean into what performs.`
       : `${fmt(data.followers)} followers and building — post consistently to compound reach.`;
+
+  // Content section: full post list filtered by its own timeline trigger, top posts, planned.
+  const cCut = cWin > 0 ? Date.now() - cWin * 86_400_000 : 0;
+  const postsInWin = data.media.filter((m) => !cCut || (m.timestamp && new Date(m.timestamp).getTime() >= cCut));
+  const topPosts = [...data.media].sort((a, b) => (b.likeCount + b.commentsCount) - (a.likeCount + a.commentsCount)).slice(0, 5);
+  const upcoming = [...planned]
+    .filter((p) => p.status !== "published")
+    .sort((a, b) => (a.scheduled_for ?? "").localeCompare(b.scheduled_for ?? ""));
+
+  const timeline = (
+    <div className="mc-toggle">
+      {[90, 365, 0].map((w) => (
+        <button key={w} className={w === cWin ? "on" : ""} onClick={() => setCWin(w)}>{w === 0 ? "All" : w === 365 ? "12mo" : w + "d"}</button>
+      ))}
+    </div>
+  );
+
+  const postRow = (m: IgMedia) => {
+    const src = m.mediaType === "VIDEO" ? m.thumbnailUrl : (m.mediaUrl ?? m.thumbnailUrl);
+    return (
+      <div key={m.id} className="mc-content">
+        {src
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={src} alt="" style={{ width: 30, height: 30, borderRadius: 7, objectFit: "cover", flex: "none", border: "1px solid var(--mc-hair)" }} />
+          : <span className="mc-thumb">{typeName(m.mediaType)}</span>}
+        <div className="mc-ct">
+          <b>{m.caption || "(no caption)"}</b>
+          <span>{fmtDate(m.timestamp)} · {typeName(m.mediaType)} · ♥ {fmt(m.likeCount)} · 💬 {fmt(m.commentsCount)}{m.reach !== null ? ` · reach ${fmt(m.reach)}` : ""}</span>
+        </div>
+        {m.permalink ? <a className="mc-viewall" href={m.permalink} target="_blank" rel="noopener noreferrer">Open ↗</a> : null}
+      </div>
+    );
+  };
+
+  const allPostsCard = (
+    <div className="mc-card mc-panel">
+      <div className="mc-ph"><div><h3>All posts</h3><p className="mc-sub">{postsInWin.length} in window · newest first</p></div></div>
+      <div style={{ marginTop: 3, maxHeight: 360, overflowY: "auto" }}>
+        {postsInWin.length ? postsInWin.map(postRow) : <p className="mc-soft" style={{ fontSize: 11 }}>No posts in this window — widen the timeline.</p>}
+      </div>
+    </div>
+  );
+
+  const topPostsCard = (
+    <div className="mc-card mc-panel">
+      <div className="mc-ph"><div><h3>Top posts</h3><p className="mc-sub">By likes + comments</p></div></div>
+      <div style={{ marginTop: 3 }}>
+        {topPosts.length ? topPosts.map(postRow) : <p className="mc-soft" style={{ fontSize: 11 }}>No posts yet.</p>}
+      </div>
+    </div>
+  );
+
+  const plannedCard = (
+    <div className="mc-card mc-panel">
+      <div className="mc-ph"><div><h3>Planned &amp; upcoming</h3><p className="mc-sub">From your pipeline</p></div><a className="mc-viewall" href="/dashboard/marketing/pipeline">Pipeline →</a></div>
+      <div style={{ marginTop: 3 }}>
+        {upcoming.length ? upcoming.slice(0, 8).map((p, i) => (
+          <div key={i} className="mc-content">
+            <span className="mc-thumb alt">{(p.format || "PLAN").slice(0, 8).toUpperCase()}</span>
+            <div className="mc-ct"><b>{p.title || "(untitled)"}</b><span>{p.scheduled_for ? fmtDate(p.scheduled_for) : "unscheduled"} · {p.status}</span></div>
+          </div>
+        )) : <p className="mc-soft" style={{ fontSize: 11 }}>Nothing planned yet — add posts in the pipeline and they’ll show here.</p>}
+      </div>
+    </div>
+  );
 
   const recentPosts = (limit: number) => (
     <div className="mc-card mc-panel">
@@ -164,11 +233,20 @@ export default function InstagramDashboard({ data, section = "overview", objecti
   const body = (() => {
     switch (section) {
       case "content":
-        return <section className="mc-zone"><Head n="02" title="Content" note="recent posts & formats" /><div className="mc-split">{recentPosts(8)}{formatCard}</div></section>;
+        return (
+          <section className="mc-zone">
+            <Head n="02" title="Content" note="everything posted & planned" ctx={timeline} />
+            {plannedCard}
+            <div className="mc-split" style={{ marginTop: 11 }}>
+              {allPostsCard}
+              <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{topPostsCard}{formatCard}</div>
+            </div>
+          </section>
+        );
       case "analytics":
         return (
           <section className="mc-zone">
-            <Head n="02" title="Analytics" note="28-day account metrics" ctx="From Instagram Insights" />
+            <Head n="02" title="Analytics" note="performance & audience" ctx="From Instagram Insights" />
             <div className={`mc-kpis ${kClass}`}>
               <KpiCard label="Reach · 28d" value={data.reach28 !== null ? fmt(data.reach28) : "—"} note={data.reach28 !== null ? undefined : "building"} />
               <KpiCard label="Views · 28d" value={data.views28 !== null ? fmt(data.views28) : "—"} note={data.views28 !== null ? undefined : "building"} />
@@ -177,10 +255,9 @@ export default function InstagramDashboard({ data, section = "overview", objecti
               <KpiCard label="Avg eng./post" value={fmt(data.avgEngagementPerPost)} note={`last ${data.media.length}`} />
             </div>
             <div className="mc-g2" style={{ marginTop: 3 }}>{growthCard}{formatCard}</div>
+            <div style={{ marginTop: 11 }}>{demoCard}</div>
           </section>
         );
-      case "audience":
-        return <section className="mc-zone"><Head n="03" title="Audience" note="growth & demographics" /><div className="mc-g2">{growthCard}{demoCard}</div></section>;
       case "reports":
         return (
           <section className="mc-zone">
