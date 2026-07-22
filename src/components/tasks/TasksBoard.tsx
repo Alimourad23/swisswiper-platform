@@ -1,5 +1,7 @@
 "use client";
 
+import SectionHead from "@/components/SectionHead";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -162,9 +164,11 @@ export default function TasksBoard({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
+      <SectionHead n="01" title="Add a task" note="capture it before it slips" />
       <QuickAdd profiles={profiles} userRole={userRole} />
 
+      <SectionHead n="02" title="Your tasks" note="filter, sort & view" />
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <SegFilter

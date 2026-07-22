@@ -1,5 +1,7 @@
 "use client";
 
+import SectionHead from "@/components/SectionHead";
+
 import { useEffect, useMemo, useState } from "react";
 import type { CalEventRaw } from "@/lib/google/calendar";
 import { respondToEvent } from "@/lib/google/calendar-actions";
@@ -101,7 +103,7 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-hint">Times shown in {tz}</p>
         <button
@@ -115,6 +117,7 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
         </button>
       </div>
 
+      <SectionHead n="01" title="At a glance" note="today, this week & your load" />
       <UpNext ev={model.upNext} now={now} />
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -125,8 +128,14 @@ export default function CalendarBoard({ events }: { events: CalEventRaw[] }) {
 
       <WeekLoadCard data={model.weekLoad} />
 
-      {model.pending.length > 0 && <PendingInvites items={model.pending} now={now} />}
+      {model.pending.length > 0 && (
+        <>
+          <SectionHead n="02" title="Invitations" note="awaiting your reply" />
+          <PendingInvites items={model.pending} now={now} />
+        </>
+      )}
 
+      <SectionHead n="03" title="Agenda" note="what’s coming up" />
       {model.tomorrow && (
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TomorrowCard day={model.tomorrow} />

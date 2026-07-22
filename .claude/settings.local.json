@@ -20,7 +20,10 @@
       "Bash(grep -iE \"\\(sk-|api[_-]?key|secret|password|token\\).*['\\\\\"=][A-Za-z0-9_\\\\-]{20,}\")",
       "Bash(git rev-list *)",
       "Bash(git remote *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__navigate",
+      "mcp__claude-in-chrome__computer"
     ]
   }
 }

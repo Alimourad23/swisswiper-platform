@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EmailThread, InboxView } from "@/lib/google/gmail";
 import { PriorityPill, SafePill } from "@/components/Pill";
+import SectionHead from "@/components/SectionHead";
 import { getDraft, getEmailBody, trashThread, untrashThread } from "@/lib/google/gmail-actions";
 import type { EmailDraftState } from "@/components/bridge/EmailReview";
 
@@ -118,9 +119,10 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <p className="text-xs text-hint">Times shown in {tz}</p>
 
+      <SectionHead n="01" title="At a glance" note="inbox load & triage" />
       {/* Inbox load — totals kept separate from recent-window triage so the
           numbers never look contradictory (totals span the whole inbox; triage
           covers only the most recent conversations). */}
@@ -138,6 +140,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
         </p>
       </div>
 
+      <SectionHead n="02" title="Action needed" note="unread mail addressed to you" />
       {/* Needs your reply */}
       <div className="sw-card">
         <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
@@ -160,6 +163,7 @@ export default function EmailsBoard({ view }: { view: InboxView }) {
         </p>
       </div>
 
+      <SectionHead n="03" title="Your inbox" note="most recent conversations" />
       {/* Triaged inbox */}
       <div className="sw-card">
         <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
