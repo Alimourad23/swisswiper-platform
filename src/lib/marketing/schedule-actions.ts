@@ -108,6 +108,19 @@ export async function updatePost(
   return { ok: !error };
 }
 
+/* Instagram only: arm/disarm auto-publishing for a scheduled post. When ON, the
+   daily publish cron posts it to Instagram on/after its scheduled date. */
+export async function setAutoPublish(id: string, value: boolean): Promise<{ ok: boolean }> {
+  const c = await uid();
+  if (!c) return { ok: false };
+  const { error } = await c.supabase
+    .from("content_posts")
+    .update({ auto_publish: value, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  revalidatePath("/dashboard/marketing");
+  return { ok: !error };
+}
+
 export async function deletePost(id: string): Promise<{ ok: boolean }> {
   const c = await uid();
   if (!c) return { ok: false };

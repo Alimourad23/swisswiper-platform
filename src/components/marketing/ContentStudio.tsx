@@ -5,6 +5,7 @@ import { channels } from "@/lib/marketing/channels";
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import { getMedia, deleteMedia } from "@/lib/marketing/media-actions";
 import { getUsageSummary } from "@/lib/marketing/ai-usage-actions";
+import { setAutoPublish } from "@/lib/marketing/schedule-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
 
 /* The content studio: a full-screen workspace for ONE post. Left = the scorecard
@@ -81,6 +82,7 @@ export default function ContentStudio({
   const [genCount, setGenCount] = useState(1);
   const [mediaMode, setMediaMode] = useState<"choose" | "upload" | "create">("choose");
   const [creditView, setCreditView] = useState<{ remaining: number; credit: number } | null>(null);
+  const [autoPub, setAutoPub] = useState(!!post.auto_publish);
   const [genKind, setGenKind] = useState<"image" | "video">("image");
   const [genSource, setGenSource] = useState<"text" | "image">("text");
   const [genSourceId, setGenSourceId] = useState<string | null>(null);
@@ -426,6 +428,20 @@ export default function ContentStudio({
                   ? "📅 On your Google Calendar — planning, drafting & publish-day reminders are set."
                   : "📅 Scheduling adds planning, drafting & publish-day reminders to your Google Calendar."}
               </p>
+            )}
+
+            {post.channel === "instagram" && (
+              <label className="flex items-start gap-2 rounded-[var(--radius-control)] bg-bg px-3 py-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={autoPub}
+                  onChange={(e) => { setAutoPub(e.target.checked); void setAutoPublish(post.id, e.target.checked); }}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#5c66a6]"
+                />
+                <span>
+                  <b className="font-medium text-ink">Auto-publish to Instagram</b> on the scheduled date — the daily publisher posts it for you. Needs an image attached and a date set.
+                </span>
+              </label>
             )}
 
             <textarea
