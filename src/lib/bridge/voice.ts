@@ -198,7 +198,7 @@ export function browserSpeak(text: string, { onStart, onEnd }: SpeakOpts = {}): 
   if (voice) u.voice = voice;
   u.lang = voice?.lang || "en-GB";
   u.rate = 0.97;
-  u.pitch = 1;
+  u.pitch = 0.9; // a touch lower — Alfred is a gentleman, not a receptionist
   u.onstart = () => onStart?.();
   u.onend = () => onEnd?.();
   u.onerror = () => onEnd?.();
@@ -213,9 +213,25 @@ export function browserSpeak(text: string, { onStart, onEnd }: SpeakOpts = {}): 
 export function pickVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
   const voices = synth.getVoices();
   if (!voices.length) return null;
+
+  // Alfred is a British gentleman. When we fall back to the browser's built-in
+  // voices (ElevenLabs "Julian" unavailable), pick a MALE en-GB voice and
+  // explicitly avoid the common female voices — otherwise Chrome/Windows tends
+  // to grab "Google UK English Female"/"Hazel" and Alfred "turns female".
+  const FEMALE =
+    /(female|hazel|susan|zira|linda|heera|catherine|serena|kate|stephanie|fiona|moira|tessa|karen|samantha|victoria|amelie|allison|ava|joanna|salli)/i;
+  const MALE = /(male|daniel|arthur|george|james|oliver|ryan|thomas|brian|matthew|guy|david)/i;
+
+  const enGB = voices.filter((v) => /en[-_]GB/i.test(v.lang));
+  const en = voices.filter((v) => /^en/i.test(v.lang));
+
   return (
-    voices.find((v) => /en[-_]GB/i.test(v.lang)) ||
-    voices.find((v) => /^en/i.test(v.lang)) ||
+    enGB.find((v) => MALE.test(v.name)) ||
+    en.find((v) => MALE.test(v.name)) ||
+    enGB.find((v) => !FEMALE.test(v.name)) ||
+    en.find((v) => !FEMALE.test(v.name)) ||
+    enGB[0] ||
+    en[0] ||
     voices[0]
   );
 }

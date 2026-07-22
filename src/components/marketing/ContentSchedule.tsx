@@ -9,6 +9,7 @@ import { syncPostCalendar, clearPostCalendar } from "@/lib/marketing/calendar-sy
 import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
 import ContentStudio from "@/components/marketing/ContentStudio";
 import MonthGrid from "@/components/marketing/MonthGrid";
+import PublishNow from "@/components/marketing/PublishNow";
 
 const STATUS_STYLE: Record<ContentStatus, string> = {
   idea: "bg-line text-hint",
@@ -469,6 +470,13 @@ function Row({
         >
           Studio ⤢
         </button>
+        <PublishNow
+          variant="row"
+          postId={post.id}
+          channel={post.channel}
+          getText={() => post.body}
+          onPublished={() => onStatus(post.id, "published")}
+        />
         <button
           type="button"
           onClick={() => onRemove(post.id)}

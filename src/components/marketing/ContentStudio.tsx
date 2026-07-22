@@ -42,6 +42,7 @@ export default function ContentStudio({
   onBodySave,
   onDelete,
   isFounder = false,
+  footer,
 }: {
   post: ContentPost;
   onClose: () => void;
@@ -54,13 +55,15 @@ export default function ContentStudio({
   onBodySave: (id: string, b: string) => void;
   onDelete: (id: string) => void;
   isFounder?: boolean;
+  /** Optional bar pinned to the bottom of the Studio (e.g. publish controls). */
+  footer?: React.ReactNode;
 }) {
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
-      content: `Share your thoughts or a rough draft and I'll shape it for ${channelName(
+      content: `At your service. Share a rough draft or a few thoughts and I'll shape it for ${channelName(
         post.channel,
-      )}. Want me to take a first pass?`,
+      )} — shall I take a first pass?`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -796,6 +799,7 @@ export default function ContentStudio({
           </div>
         </div>
       </div>
+      {footer}
     </div>
   );
 }
