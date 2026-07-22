@@ -127,13 +127,20 @@ export function getModule(slug: string): ModuleDef | undefined {
 
 /* ---- Sidebar navigation model --------------------------------------- */
 
+export type NavChild = { name: string; href: string; external?: boolean };
+export type NavGroup = { label?: string; items: NavChild[] };
+
 export type NavItem = {
   name: string;
   href?: string; // present only when clickable
   icon?: ReactNode;
   live?: boolean; // shows a green "Live" pill
-  /** Nested items, revealed only while inside the parent's section. */
-  children?: NavItem[];
+  /** Flat nested items, revealed only while inside the parent's section. */
+  children?: NavChild[];
+  /** Labelled sub-sections (e.g. Marketing → Channels / Planning / …). When a
+      module is active, its groups replace the flat list so every module reads
+      the same way: the module at top, then its own breakdown. */
+  groups?: NavGroup[];
 };
 
 export const founderNav: NavItem[] = [
@@ -155,11 +162,28 @@ export const founderNav: NavItem[] = [
     href: "/dashboard/marketing",
     icon: icons.marketing,
     live: true,
-    children: [
-      { name: "Plan", href: "/dashboard/marketing/plan" },
-      { name: "Pipeline", href: "/dashboard/marketing/pipeline" },
-      { name: "Calendar", href: "/dashboard/marketing/calendar" },
-      { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
+    groups: [
+      { items: [{ name: "Executive summary", href: "/dashboard/marketing" }] },
+      {
+        label: "Channels",
+        items: [
+          { name: "LinkedIn", href: "/dashboard/marketing/linkedin" },
+          { name: "Instagram", href: "/dashboard/marketing/instagram" },
+          { name: "Website", href: "https://swisswiper.com/", external: true },
+        ],
+      },
+      {
+        label: "Planning",
+        items: [
+          { name: "Plan", href: "/dashboard/marketing/plan" },
+          { name: "Pipeline", href: "/dashboard/marketing/pipeline" },
+          { name: "Content calendar", href: "/dashboard/marketing/calendar" },
+        ],
+      },
+      {
+        label: "Conversations",
+        items: [{ name: "Engagement inbox", href: "/dashboard/marketing/engagement" }],
+      },
     ],
   },
 ];
