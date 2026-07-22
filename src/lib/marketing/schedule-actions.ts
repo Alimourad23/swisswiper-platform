@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { ContentPost, ContentStatus } from "@/lib/marketing/schedule";
+import { publishSingleInstagramPost } from "@/lib/marketing/publish";
 
 /* Server actions for the content schedule. Team-collaborative (RLS lets any
    teammate read/edit). Types + constants live in `schedule.ts`. */
@@ -123,35 +124,16 @@ export async function deletePost(id: string): Promise<{ ok: boolean }> {
   return { ok: !error };
 }
 
-/* Instagram auto-publish controls (per-post opt-in). `reset` clears a failed
-   attempt so the post becomes due again at the next publish run. */
-export async function setInstagramPublish(
-  id: string,
-  input: { autoPublish?: boolean; reset?: boolean; publishAt?: string | null },
-): Promise<{ ok: boolean }> {
-  const c = await uid();
-  if (!c) return { ok: false };
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (input.autoPublish !== undefined) patch.auto_publish = input.autoPublish;
-  if (input.publishAt !== undefined) patch.publish_at = input.publishAt;
-  if (input.reset) {
-    patch.publish_status = null;
-    patch.publish_error = null;
-  }
-  const { error } = await c.supabase.from("content_posts").update(patch).eq("id", id);
-  revalidatePath("/dashboard/marketing/pipeline");
-  return { ok: !error };
-}
-
-/* "Publish now" from the Studio: publish this Instagram post immediately via
-   the same engine the daily run uses (atomic claim included). */
-export async function publishNow(
-  id: string,
+/* Publish an Instagram post right now (manual "Publish now" from the composer).
+   Instagram-only — LinkedIn has no publishing API (read-only from the export).
+   The post must have media attached; publishSingleInstagramPost surfaces a
+   friendly error otherwise. */
+export async function publishInstagramNow(
+  postId: string,
 ): Promise<{ ok: boolean; permalink?: string | null; error?: string }> {
   const c = await uid();
   if (!c) return { ok: false, error: "You're not signed in." };
-  const { publishSingleInstagramPost } = await import("@/lib/marketing/publish");
-  const r = await publishSingleInstagramPost(c.supabase, id);
-  revalidatePath("/dashboard/marketing/pipeline");
-  return r;
+  const res = await publishSingleInstagramPost(c.supabase, postId);
+  revalidatePath("/dashboard/marketing");
+  return res;
 }
