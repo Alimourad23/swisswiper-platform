@@ -123,6 +123,18 @@ export const COCKPIT_CSS = `
 export const fmt = (n: number) => n.toLocaleString("en-US");
 export const pct1 = (n: number) => (n * 100).toFixed(1) + "%";
 
+/* An honest placeholder for a section that has no data yet — never fabricated
+   numbers; it says plainly what will appear and when. */
+export function SectionPlaceholder({ title, reason, cta }: { title: string; reason: string; cta?: React.ReactNode }) {
+  return (
+    <div className="mc-card mc-panel">
+      <div className="mc-ph"><div><h3>{title}</h3><p className="mc-sub">Not available yet</p></div></div>
+      <p className="mc-soft" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.55, maxWidth: 580 }}>{reason}</p>
+      {cta ? <div style={{ marginTop: 11 }}>{cta}</div> : null}
+    </div>
+  );
+}
+
 /** Shared area sparkline / trend line. */
 export function Spark({ data, color = "var(--peri-deep)", h = 60 }: { data: number[]; color?: string; h?: number }) {
   const W = 240, P = 6;

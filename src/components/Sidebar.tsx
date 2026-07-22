@@ -164,22 +164,29 @@ export default function Sidebar() {
                           {g.label && <GroupLabel>{g.label}</GroupLabel>}
                           {g.items.map((child) => {
                             const sections = channelSections[child.href];
-                            const onChannel = pathname === child.href;
+                            const onChannel = pathname === child.href || pathname.startsWith(child.href + "/");
                             return (
                               <div key={child.name} className="flex flex-col">
                                 <ChildLink child={child} pathname={pathname} />
-                                {/* when you're on this channel, its own sections appear */}
+                                {/* on this channel → its full set of sections, each a page */}
                                 {sections && onChannel && (
                                   <div className="mb-1 ml-6 flex flex-col border-l border-hairline pl-2">
-                                    {sections.map((sec) => (
-                                      <a
-                                        key={sec.name}
-                                        href={sec.href}
-                                        className="rounded-[var(--radius-control)] px-3 py-1 text-[12.5px] text-muted transition-colors hover:bg-bg hover:text-ink"
-                                      >
-                                        {sec.name}
-                                      </a>
-                                    ))}
+                                    {sections.map((sec) => {
+                                      const secActive = pathname === sec.href;
+                                      return (
+                                        <Link
+                                          key={sec.name}
+                                          href={sec.href}
+                                          aria-current={secActive ? "page" : undefined}
+                                          className={[
+                                            "rounded-[var(--radius-control)] px-3 py-1 text-[12.5px] transition-colors",
+                                            secActive ? "bg-peri-soft font-medium text-peri-deep" : "text-muted hover:bg-bg hover:text-ink",
+                                          ].join(" ")}
+                                        >
+                                          {sec.name}
+                                        </Link>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>

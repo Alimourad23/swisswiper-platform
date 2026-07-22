@@ -188,17 +188,36 @@ export const founderNav: NavItem[] = [
   },
 ];
 
-/* When you open a channel, its own sections appear in the sidebar (anchors that
-   scroll the channel dashboard). Keyed by the channel's page path. */
+/* When you open a channel, its full set of sections appears in the sidebar,
+   each a dedicated page. Keyed by the channel's base path. Sections without
+   live data yet render an honest placeholder page (never fabricated numbers). */
+const SECTION_KEYS = [
+  "overview", "content", "analytics", "audience", "engagement",
+  "stories", "reels", "hashtags", "competitors", "campaigns", "reports",
+] as const;
+export type SectionKey = (typeof SECTION_KEYS)[number];
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  overview: "Overview", content: "Content", analytics: "Analytics", audience: "Audience",
+  engagement: "Engagement", stories: "Stories", reels: "Reels", hashtags: "Hashtags",
+  competitors: "Competitors", campaigns: "Campaigns", reports: "Reports",
+};
+
+/* Sections that render real data today per channel; the rest are honest placeholders. */
+export const CHANNEL_LIVE_SECTIONS: Record<string, SectionKey[]> = {
+  linkedin: ["overview", "content", "analytics", "audience", "reports"],
+  instagram: ["overview", "content", "analytics", "audience", "reports"],
+};
+
+function sectionsFor(channel: string): NavChild[] {
+  const base = `/dashboard/marketing/${channel}`;
+  return SECTION_KEYS.map((k) => ({
+    name: SECTION_LABELS[k],
+    href: k === "overview" ? base : `${base}/${k}`,
+  }));
+}
+
 export const channelSections: Record<string, NavChild[]> = {
-  "/dashboard/marketing/linkedin": [
-    { name: "Overview", href: "/dashboard/marketing/linkedin#overview" },
-    { name: "Performance", href: "/dashboard/marketing/linkedin#performance" },
-    { name: "Audience", href: "/dashboard/marketing/linkedin#audience" },
-  ],
-  "/dashboard/marketing/instagram": [
-    { name: "Overview", href: "/dashboard/marketing/instagram#overview" },
-    { name: "Content", href: "/dashboard/marketing/instagram#content" },
-    { name: "Audience", href: "/dashboard/marketing/instagram#audience" },
-  ],
+  "/dashboard/marketing/linkedin": sectionsFor("linkedin"),
+  "/dashboard/marketing/instagram": sectionsFor("instagram"),
 };
