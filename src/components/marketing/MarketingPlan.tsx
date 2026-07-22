@@ -38,7 +38,7 @@ export default function MarketingPlanCard({ initial }: { initial: MarketingPlan 
         className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left"
       >
         <div className="min-w-0">
-          <h3 className="text-base font-medium">Marketing plan</h3>
+          <h3 className="text-[14px] font-medium">Marketing plan</h3>
           <p className="truncate text-xs text-hint">
             {summary || "Set your north star — goals, audience, positioning, pillars, cadence."}
           </p>

@@ -109,7 +109,7 @@ export default function EngagementBoard({
       {/* Comments */}
       <div className="sw-card">
         <div className="border-b border-hairline px-6 py-4">
-          <h3 className="text-base font-medium">Comments</h3>
+          <h3 className="text-[14px] font-medium">Comments</h3>
           <p className="text-xs text-hint">
             {openComments.length ? `${openComments.length} awaiting a reply` : "All caught up"} · founders reply
             personally, Alfred drafts
@@ -222,7 +222,7 @@ export default function EngagementBoard({
       {/* Direct messages */}
       <div className="sw-card">
         <div className="border-b border-hairline px-6 py-4">
-          <h3 className="text-base font-medium">Direct messages</h3>
+          <h3 className="text-[14px] font-medium">Direct messages</h3>
           <p className="text-xs text-hint">
             Replies allowed within 24h of the customer&apos;s last message (Instagram&apos;s rule)
           </p>

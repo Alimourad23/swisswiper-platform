@@ -44,7 +44,7 @@ export default function NotableEngagers({ initial }: { initial: Engager[] }) {
     <div className="sw-card">
       <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-base font-medium">Notable engagers</h3>
+          <h3 className="text-[14px] font-medium">Notable engagers</h3>
           <ManualTag />
         </div>
         <span className="text-xs text-hint">You fill this in</span>

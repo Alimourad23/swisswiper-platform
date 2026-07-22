@@ -191,11 +191,9 @@ export const founderNav: NavItem[] = [
 /* When you open a channel, its full set of sections appears in the sidebar,
    each a dedicated page. Keyed by the channel's base path. Sections without
    live data yet render an honest placeholder page (never fabricated numbers). */
-const SECTION_KEYS = [
-  "overview", "content", "analytics", "audience", "engagement",
-  "stories", "reels", "hashtags", "competitors", "campaigns", "reports",
-] as const;
-export type SectionKey = (typeof SECTION_KEYS)[number];
+export type SectionKey =
+  | "overview" | "content" | "analytics" | "audience" | "engagement"
+  | "stories" | "reels" | "hashtags" | "competitors" | "campaigns" | "reports";
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   overview: "Overview", content: "Content", analytics: "Analytics", audience: "Audience",
@@ -203,15 +201,16 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   competitors: "Competitors", campaigns: "Campaigns", reports: "Reports",
 };
 
-/* Sections that render real data today per channel; the rest are honest placeholders. */
-export const CHANNEL_LIVE_SECTIONS: Record<string, SectionKey[]> = {
-  linkedin: ["overview", "content", "analytics", "audience", "reports"],
-  instagram: ["overview", "content", "analytics", "audience", "reports"],
+/* Sections are channel-appropriate — only what's relevant to each medium.
+   Stories/Reels/Hashtags are Instagram-only; they never appear on LinkedIn. */
+export const CHANNEL_SECTION_KEYS: Record<string, SectionKey[]> = {
+  linkedin: ["overview", "content", "analytics", "audience", "engagement", "competitors", "campaigns", "reports"],
+  instagram: ["overview", "content", "analytics", "audience", "engagement", "stories", "reels", "hashtags", "competitors", "campaigns", "reports"],
 };
 
 function sectionsFor(channel: string): NavChild[] {
   const base = `/dashboard/marketing/${channel}`;
-  return SECTION_KEYS.map((k) => ({
+  return (CHANNEL_SECTION_KEYS[channel] ?? []).map((k) => ({
     name: SECTION_LABELS[k],
     href: k === "overview" ? base : `${base}/${k}`,
   }));

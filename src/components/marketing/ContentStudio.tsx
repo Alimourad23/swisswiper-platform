@@ -369,7 +369,7 @@ export default function ContentStudio({
               onChange={(e) => onTitle(post.id, e.target.value)}
               onBlur={(e) => onSaveTitle(post.id, e.target.value)}
               placeholder="Post title or topic…"
-              className="w-full bg-transparent text-xl font-medium text-ink placeholder:text-hint focus:outline-none"
+              className="w-full bg-transparent text-lg font-medium text-ink placeholder:text-hint focus:outline-none"
             />
 
             <div className="flex flex-wrap items-center gap-2">

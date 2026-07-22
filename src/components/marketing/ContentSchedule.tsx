@@ -188,7 +188,7 @@ export default function ContentSchedule({
     <div className="sw-card">
       <div className="flex items-center justify-between gap-3 border-b border-hairline px-6 py-4">
         <div>
-          <h3 className="text-base font-medium">Content schedule</h3>
+          <h3 className="text-[14px] font-medium">Content schedule</h3>
           <p className="text-xs text-hint">
             This week: {toPostWeek} to post · {publishedWeek} published
           </p>
