@@ -14,6 +14,7 @@ import {
 import { COCKPIT_CSS, Spark, Ring, SectionPlaceholder, fmt, pct1 } from "./cockpit-ui";
 import { LinkedInLogo } from "./logos";
 import Objectives from "./Objectives";
+import CreatePostButton from "./CreatePostButton";
 import type { Objective } from "@/lib/marketing/okr";
 
 /* The LinkedIn channel dashboard. Overview is a complete executive summary of
@@ -271,7 +272,7 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
               <button key={d} className={d === days ? "on" : ""} onClick={() => setDays(d)}>{d === 365 ? "365d" : d + "d"}</button>
             ))}
           </div>
-          <a className="mc-cta" href="/dashboard/marketing/pipeline?channel=linkedin">✦&nbsp; Create post</a>
+          <CreatePostButton channel="linkedin" />
         </div>
       </div>
 

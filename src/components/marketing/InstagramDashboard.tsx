@@ -3,6 +3,7 @@
 import { COCKPIT_CSS, Spark, SectionPlaceholder, fmt } from "./cockpit-ui";
 import { InstagramLogo } from "./logos";
 import Objectives from "./Objectives";
+import CreatePostButton from "./CreatePostButton";
 import type { Objective } from "@/lib/marketing/okr";
 
 /* The Instagram channel dashboard. Overview is a complete executive summary of
@@ -232,7 +233,7 @@ export default function InstagramDashboard({ data, section = "overview", objecti
         <h1 className="mc-h1"><InstagramLogo size={18} /> Instagram <span>@{data.username} · live from Instagram</span></h1>
         <div className="mc-right">
           <span className="mc-badge pink">Live API</span>
-          <a className="mc-cta" href="/dashboard/marketing/pipeline?channel=instagram">✦&nbsp; Create post</a>
+          <CreatePostButton channel="instagram" />
         </div>
       </div>
 
