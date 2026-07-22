@@ -2,6 +2,7 @@ import LinkedInDashboard from "@/components/marketing/LinkedInDashboard";
 import NotableEngagers, { type Engager } from "@/components/marketing/NotableEngagers";
 import UploadDropzone from "@/components/marketing/UploadDropzone";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
+import { linkedinObjectives } from "@/lib/marketing/channel-okr";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,11 @@ async function getInquiries(): Promise<number> {
 
 export default async function LinkedInPage() {
   const { metrics, source, capturedAt } = await getLinkedInMetrics();
-  const [engagers, inquiries] = await Promise.all([getEngagers(), getInquiries()]);
+  const [engagers, inquiries, objectives] = await Promise.all([
+    getEngagers(),
+    getInquiries(),
+    linkedinObjectives(metrics),
+  ]);
 
   return (
     <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5">
@@ -42,6 +47,7 @@ export default async function LinkedInPage() {
         source={source}
         capturedAt={capturedAt}
         engagers={engagers}
+        objectives={objectives}
       />
       {/* Manage — add notable engagers, refresh the export */}
       <div className="flex flex-col gap-4 border-t border-hairline pt-5">

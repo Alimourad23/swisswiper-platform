@@ -2,6 +2,8 @@
 
 import { COCKPIT_CSS, Spark, SectionPlaceholder, fmt } from "./cockpit-ui";
 import { InstagramLogo } from "./logos";
+import Objectives from "./Objectives";
+import type { Objective } from "@/lib/marketing/okr";
 
 /* The Instagram channel dashboard. Overview is a complete executive summary of
    the account; each sub-section is the deep-dive. Live from the Instagram API;
@@ -53,7 +55,7 @@ function downloadHtml(filename: string, html: string) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
-export default function InstagramDashboard({ data, section = "overview" }: { data: IgData; section?: string }) {
+export default function InstagramDashboard({ data, section = "overview", objectives }: { data: IgData; section?: string; objectives?: Objective[] }) {
   const kpis: { label: string; value: string; note?: string }[] = [
     { label: "Followers", value: fmt(data.followers), note: growthNote(data) },
     { label: "Posts", value: fmt(data.mediaCount) },
@@ -218,6 +220,7 @@ export default function InstagramDashboard({ data, section = "overview" }: { dat
             {kpiRow}
             <div className="mc-split">{recentPosts(3)}{formatCard}</div>
             <div className="mc-g2">{growthCard}{demoCard}</div>
+            {objectives?.length ? <Objectives title="Objectives · Instagram" items={objectives} editHref="/dashboard/marketing/plan" /> : null}
           </section>
         );
     }

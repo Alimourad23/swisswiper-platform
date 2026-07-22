@@ -1,6 +1,7 @@
 import LinkedInDashboard from "@/components/marketing/LinkedInDashboard";
 import type { Engager } from "@/components/marketing/NotableEngagers";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
+import { linkedinObjectives } from "@/lib/marketing/channel-okr";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,11 @@ async function getInquiries(): Promise<number> {
 export default async function LinkedInSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
   const { metrics, source, capturedAt } = await getLinkedInMetrics();
-  const [engagers, inquiries] = await Promise.all([getEngagers(), getInquiries()]);
+  const [engagers, inquiries, objectives] = await Promise.all([
+    getEngagers(),
+    getInquiries(),
+    linkedinObjectives(metrics),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-[1200px]">
@@ -43,6 +48,7 @@ export default async function LinkedInSectionPage({ params }: { params: Promise<
         capturedAt={capturedAt}
         engagers={engagers}
         section={section}
+        objectives={objectives}
       />
     </div>
   );

@@ -19,9 +19,9 @@ export default function MeetingsTodayKpi({ events }: { events: CalEventRaw[] }) 
   }, [events, now]);
 
   return (
-    <div className="sw-card flex flex-col gap-3 px-6 py-5">
-      <span className="text-sm text-muted">Meetings today</span>
-      <span className="text-3xl font-medium tracking-tight text-ink">{count ?? "—"}</span>
+    <div className="sw-card flex flex-col gap-1.5 px-4 py-3">
+      <span className="text-[11px] text-hint">Meetings today</span>
+      <span className="text-[20px] font-medium tracking-tight text-ink">{count ?? "—"}</span>
     </div>
   );
 }

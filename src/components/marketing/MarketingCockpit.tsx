@@ -14,6 +14,8 @@ import {
 } from "@/lib/linkedin/compute";
 import { recommendedCount } from "@/lib/marketing/cadence";
 import { COCKPIT_CSS } from "./cockpit-ui";
+import Objectives from "./Objectives";
+import type { Objective } from "@/lib/marketing/okr";
 
 /* ─────────────────────────────────────────────────────────────────────────
    Marketing cockpit — the four-zone executive overview.
@@ -31,6 +33,8 @@ type Props = {
   ig: IgLite;
   posts: ContentPost[];
   plan: MarketingPlan;
+  objectives?: Objective[];
+  objective?: string;
 };
 
 const nf = (n: number) => n.toLocaleString("en-US");
@@ -51,7 +55,7 @@ function deltaText(cur: number, prev: number): { text: string; good: boolean } |
   return { text: (r >= 0 ? "+" : "") + r + "%", good: r >= 0 };
 }
 
-export default function MarketingCockpit({ metrics, ig, posts, plan }: Props) {
+export default function MarketingCockpit({ metrics, ig, posts, plan, objectives, objective }: Props) {
   const [days, setDays] = useState(30);
   const a = windowAgg(metrics, days);
   const dm = decisionMakerShare(metrics);
@@ -300,6 +304,9 @@ export default function MarketingCockpit({ metrics, ig, posts, plan }: Props) {
             <div className="mc-zt"><span className="mc-znum">04</span><h2>Planning</h2><span className="mc-zd">— progress &amp; what’s next</span></div>
             <a className="mc-viewall" href="/dashboard/marketing/plan">Full plan →</a>
           </div>
+          {objectives?.length ? (
+            <Objectives title="Objectives" objective={objective} items={objectives} editHref="/dashboard/marketing/plan" />
+          ) : null}
           <div className="mc-card mc-panel">
             <div className="mc-ringrow">
               <Ring pct={Math.min(1, plannedThisMonth / (target || 1))} label={`${Math.round((plannedThisMonth / (target || 1)) * 100)}%`} />

@@ -13,6 +13,8 @@ import {
 } from "@/lib/linkedin/compute";
 import { COCKPIT_CSS, Spark, Ring, SectionPlaceholder, fmt, pct1 } from "./cockpit-ui";
 import { LinkedInLogo } from "./logos";
+import Objectives from "./Objectives";
+import type { Objective } from "@/lib/marketing/okr";
 
 /* The LinkedIn channel dashboard. Overview is a complete executive summary of
    the channel; each sub-section is the deep-dive. Header, time selector and
@@ -21,7 +23,7 @@ import { LinkedInLogo } from "./logos";
 type Engager = { id: string; name: string; note: string | null };
 type Props = {
   metrics: LinkedInMetrics; inquiries: number; source: string; capturedAt: string;
-  engagers: Engager[]; section?: string;
+  engagers: Engager[]; section?: string; objectives?: Objective[];
 };
 
 function delta(cur: number, prev: number): { text: string; good: boolean } | null {
@@ -75,7 +77,7 @@ function downloadHtml(filename: string, html: string) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
-export default function LinkedInDashboard({ metrics, inquiries, source, capturedAt, engagers, section = "overview" }: Props) {
+export default function LinkedInDashboard({ metrics, inquiries, source, capturedAt, engagers, section = "overview", objectives }: Props) {
   const [days, setDays] = useState(365);
   const a = windowAgg(metrics, days);
   const dm = decisionMakerShare(metrics);
@@ -252,6 +254,7 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
             {kpiRow}
             <div className="mc-perfA">{funnelCard}{trendCard}{decisionCard}</div>
             <div className="mc-split">{topContentCard(3)}{formatCard}</div>
+            {objectives?.length ? <Objectives title="Objectives · LinkedIn" items={objectives} editHref="/dashboard/marketing/plan" /> : null}
           </section>
         );
     }

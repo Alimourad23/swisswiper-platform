@@ -180,7 +180,7 @@ function UpNext({ ev, now }: { ev: CalEventRaw | null; now: number }) {
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-wider text-hint">Up next</p>
         <div className="mt-1 flex items-center gap-2">
-          <p className="truncate text-lg font-medium text-ink">{ev.title}</p>
+          <p className="truncate text-[15px] font-medium text-ink">{ev.title}</p>
           {ev.overlaps && <OverlapBadge />}
         </div>
         <p className="mt-0.5 text-sm text-muted">
@@ -510,10 +510,10 @@ function ReminderTag() {
 function Stat({ label, value, accent = false }: { label: string; value: number; accent?: boolean }) {
   return (
     <div className="sw-card px-6 py-5">
-      <span className="text-sm text-muted">{label}</span>
+      <span className="text-[11px] text-hint">{label}</span>
       <p
         className={[
-          "mt-2 text-3xl font-medium tracking-tight",
+          "mt-1.5 text-[20px] font-medium tracking-tight",
           accent ? "text-peri-deep" : "text-ink",
         ].join(" ")}
       >

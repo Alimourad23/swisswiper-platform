@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import InstagramDashboard from "@/components/marketing/InstagramDashboard";
 import { getInstagramAnalytics } from "@/lib/marketing/instagram-data";
+import { instagramObjectives } from "@/lib/marketing/channel-okr";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -40,7 +41,8 @@ async function InstagramData() {
     );
   }
 
-  return <InstagramDashboard data={data} />;
+  const objectives = await instagramObjectives(data.followers, data.reach28);
+  return <InstagramDashboard data={data} objectives={objectives} />;
 }
 
 function Skeleton() {
