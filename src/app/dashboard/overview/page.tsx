@@ -96,7 +96,7 @@ async function OverviewBody({ firstName }: { firstName: string }) {
             <ConnectState
               icon={icons.emails}
               message="Connect your Google account with read-only Gmail access to see your triaged inbox."
-              action={<GoogleAuthButton variant="inline" label="Connect Gmail access" />}
+              action={<GoogleAuthButton variant="inline" label="Connect Gmail access" forceConsent />}
             />
           )}
         </Panel>
@@ -108,7 +108,7 @@ async function OverviewBody({ firstName }: { firstName: string }) {
             <ConnectState
               icon={icons.calendar}
               message="Connect your Google account with read-only Calendar access to see today's agenda."
-              action={<GoogleAuthButton variant="inline" label="Connect Calendar access" />}
+              action={<GoogleAuthButton variant="inline" label="Connect Calendar access" forceConsent />}
             />
           )}
         </Panel>

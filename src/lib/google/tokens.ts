@@ -60,8 +60,22 @@ export async function getGoogleAccessToken(): Promise<string | null> {
   });
 
   if (!res.ok) {
+    const body = await res.text();
     // eslint-disable-next-line no-console
-    console.error("Google token refresh failed:", res.status, await res.text());
+    console.error("Google token refresh failed:", res.status, body);
+    // If Google says the refresh token is dead — revoked, or (most commonly)
+    // expired because the OAuth consent screen is still in "Testing" status,
+    // where Google expires refresh tokens after 7 days — clear the stored token
+    // so the UI shows a clean "Reconnect Google" instead of erroring on every
+    // call. A transient 5xx is left untouched so we never drop a still-good token.
+    if (res.status === 400 && body.includes("invalid_grant")) {
+      try {
+        await supabase.from("google_tokens").delete().eq("user_id", user.id);
+      } catch {
+        /* best-effort cleanup */
+      }
+      tokenCache.delete(user.id);
+    }
     return null;
   }
 
