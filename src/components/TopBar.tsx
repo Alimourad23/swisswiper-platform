@@ -15,13 +15,21 @@ export default async function TopBar() {
 
   // Recent notifications for the bell (RLS scopes these to the signed-in user).
   let notifications: AppNotification[] = [];
+  let googleConnected = false;
   if (user) {
-    const { data } = await supabase
-      .from("notifications")
-      .select("id, task_id, type, message, read, created_at")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    notifications = (data ?? []) as AppNotification[];
+    const [{ data: notif }, { data: gtok }] = await Promise.all([
+      supabase
+        .from("notifications")
+        .select("id, task_id, type, message, read, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20),
+      // A stored refresh-token row means Google is connected. Dead tokens now
+      // clear themselves (see lib/google/tokens.ts), so a present row is a
+      // reliable "connected" signal for the header.
+      supabase.from("google_tokens").select("user_id").eq("user_id", user.id).maybeSingle(),
+    ]);
+    notifications = (notif ?? []) as AppNotification[];
+    googleConnected = !!gtok;
   }
 
   return (
@@ -32,7 +40,7 @@ export default async function TopBar() {
 
       <div className="flex items-center gap-3">
         {user && <NotificationBell userId={user.id} initial={notifications} />}
-        <UserMenu name={name} avatarUrl={avatarUrl} />
+        <UserMenu name={name} avatarUrl={avatarUrl} googleConnected={googleConnected} />
       </div>
     </header>
   );

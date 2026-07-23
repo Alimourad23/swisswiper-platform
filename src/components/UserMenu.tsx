@@ -8,9 +8,11 @@ import GoogleAuthButton from "@/components/GoogleAuthButton";
 export default function UserMenu({
   name,
   avatarUrl,
+  googleConnected = false,
 }: {
   name: string;
   avatarUrl: string | null;
+  googleConnected?: boolean;
 }) {
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
@@ -48,10 +50,21 @@ export default function UserMenu({
         </div>
       )}
 
-      {/* Recovery for the rare case the stored Google token is lost or scopes
-          need re-granting — forces the consent screen. */}
+      {/* Header Google status. When connected, a quiet confirmation (no alarm);
+          the "Reconnect Google" button only appears when Google is actually
+          dropped, so a healthy connection never looks unresolved. Reconnect
+          forces the consent screen to mint a fresh refresh token. */}
       <span className="hidden sm:inline">
-        <GoogleAuthButton variant="subtle" forceConsent label="Reconnect Google" />
+        {googleConnected ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600" title="Google is connected">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+            Google connected
+          </span>
+        ) : (
+          <GoogleAuthButton variant="subtle" forceConsent label="Reconnect Google" />
+        )}
       </span>
 
       <button
