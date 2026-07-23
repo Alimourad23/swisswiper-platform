@@ -45,9 +45,18 @@ const extIcon = (
   </svg>
 );
 
-export default function Sidebar() {
+export default function Sidebar({ allowed = [], manager = false }: { allowed?: string[]; manager?: boolean }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Only show modules this role may open. Overview is always visible; Admin is
+  // manager-only. Everything else follows the access policy.
+  const nav = founderNav.filter((it) => {
+    const key = it.href ? it.href.split("/")[2] ?? "" : "";
+    if (key === "admin") return manager;
+    if (key === "overview" || !key) return true;
+    return allowed.includes(key);
+  });
 
   useEffect(() => {
     try {
@@ -72,7 +81,7 @@ export default function Sidebar() {
 
   // The module we're currently inside (has its own sub-nav). Overview has none,
   // so on Overview nothing collapses — every function stays in view.
-  const activeModule = founderNav.find((it) => isTopActive(it) && (it.groups || it.children));
+  const activeModule = nav.find((it) => isTopActive(it) && (it.groups || it.children));
   const inModule = !!activeModule;
 
   /* ---------------- collapsed: slim icon rail ---------------- */
@@ -88,7 +97,7 @@ export default function Sidebar() {
           {chevron("right")}
         </button>
         <nav className="flex flex-col items-center gap-1.5">
-          {founderNav.map((item) => {
+          {nav.map((item) => {
             const active = isTopActive(item);
             return (
               <Link
@@ -130,7 +139,7 @@ export default function Sidebar() {
         <div>
           <SectionLabel>Founder view</SectionLabel>
           <div className="flex flex-col gap-1">
-            {founderNav.map((item) => {
+            {nav.map((item) => {
               const active = isTopActive(item);
               const isActiveModule = activeModule?.name === item.name;
               // A non-active module, while we're inside another module → compact.

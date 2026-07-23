@@ -61,6 +61,12 @@ export const icons: Record<string, ReactNode> = {
       <path d="m3.5 6 1.8 1.8L8.5 4.5M3.5 13l1.8 1.8 3.2-3.3M3.5 20l1.8 1.8 3.2-3.3M12.5 6.5h8M12.5 13.5h8M12.5 20.5h8" />
     </svg>
   ),
+  admin: (
+    <svg {...iconProps} aria-hidden="true">
+      <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
+      <path d="m9.5 12 1.8 1.8L15 10" />
+    </svg>
+  ),
 };
 
 export type ModuleDef = {
@@ -183,6 +189,21 @@ export const founderNav: NavItem[] = [
       {
         label: "Conversations",
         items: [{ name: "Engagement inbox", href: "/dashboard/marketing/engagement" }],
+      },
+    ],
+  },
+  {
+    name: "Admin",
+    href: "/dashboard/admin",
+    icon: icons.admin,
+    groups: [
+      { items: [{ name: "People", href: "/dashboard/admin" }] },
+      {
+        label: "Control",
+        items: [
+          { name: "Access", href: "/dashboard/admin/access" },
+          { name: "Audit log", href: "/dashboard/admin/audit" },
+        ],
       },
     ],
   },
