@@ -3,7 +3,9 @@ import Link from "next/link";
 /* Tabs within the admin panel. Kept in one place so pages stay in sync. */
 const TABS = [
   { key: "people", label: "People", href: "/dashboard/admin" },
+  { key: "teams", label: "Teams", href: "/dashboard/admin/teams" },
   { key: "access", label: "Access", href: "/dashboard/admin/access" },
+  { key: "settings", label: "Settings", href: "/dashboard/admin/settings" },
   { key: "audit", label: "Audit log", href: "/dashboard/admin/audit" },
 ];
 

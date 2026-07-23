@@ -197,11 +197,17 @@ export const founderNav: NavItem[] = [
     href: "/dashboard/admin",
     icon: icons.admin,
     groups: [
-      { items: [{ name: "People", href: "/dashboard/admin" }] },
+      {
+        items: [
+          { name: "People", href: "/dashboard/admin" },
+          { name: "Teams", href: "/dashboard/admin/teams" },
+        ],
+      },
       {
         label: "Control",
         items: [
           { name: "Access", href: "/dashboard/admin/access" },
+          { name: "Settings", href: "/dashboard/admin/settings" },
           { name: "Audit log", href: "/dashboard/admin/audit" },
         ],
       },
