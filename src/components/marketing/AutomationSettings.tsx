@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { saveAutomationPolicy } from "@/lib/marketing/automation-actions";
 import { CATEGORIES, autoCount, type AutomationPolicy, type CatKey } from "@/lib/marketing/automation";
+import EditGate from "./EditGate";
 
 /* The graduation switches — set, per category, whether Alfred's reply stays
    approval-first or auto-sends. Sensitive categories are locked to approval. */
 
-export default function AutomationSettings({ initial }: { initial: AutomationPolicy }) {
+export default function AutomationSettings({ initial, canEdit = true }: { initial: AutomationPolicy; canEdit?: boolean }) {
   const [policy, setPolicy] = useState<AutomationPolicy>(initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -25,6 +26,7 @@ export default function AutomationSettings({ initial }: { initial: AutomationPol
   const autos = autoCount(policy);
 
   return (
+    <EditGate canEdit={canEdit}>
     <div className="sw-card flex flex-col gap-3 p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -89,5 +91,6 @@ export default function AutomationSettings({ initial }: { initial: AutomationPol
         “Auto” categories stay draft-first for your review.
       </p>
     </div>
+    </EditGate>
   );
 }

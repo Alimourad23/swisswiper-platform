@@ -131,6 +131,38 @@ export async function getPeople(): Promise<PeopleView> {
   return { ok: true, people, teams };
 }
 
+/* Invite a teammate by email. Sends a Supabase invite (they set their own
+   password via the emailed link) and pre-assigns their role + team so they land
+   with the right access on first sign-in. Only a founder can invite straight in
+   as a founder. */
+export async function inviteUser(
+  email: string,
+  role: Role,
+  teamId: string | null,
+): Promise<{ ok: boolean; reason?: string }> {
+  const m = await manager();
+  if (!m.ok) return { ok: false, reason: m.reason };
+  const clean = email.trim().toLowerCase();
+  if (!clean || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return { ok: false, reason: "bad_email" };
+  if (role === "founder" && m.me.role !== "founder") return { ok: false, reason: "founder_only" };
+
+  const { data, error } = await m.admin.auth.admin.inviteUserByEmail(clean);
+  if (error || !data?.user) {
+    // Most common cause: the address already has an account.
+    const msg = (error?.message ?? "").toLowerCase();
+    if (msg.includes("already") || msg.includes("registered")) return { ok: false, reason: "exists" };
+    return { ok: false, reason: "invite_failed" };
+  }
+
+  await m.admin.from("profiles").upsert(
+    { id: data.user.id, email: clean, role, team_id: teamId, status: "active", updated_at: new Date().toISOString() },
+    { onConflict: "id" },
+  );
+  await audit(m, "Invited teammate", { target: clean, after: role });
+  revalidatePath("/dashboard/admin");
+  return { ok: true };
+}
+
 export async function setUserRole(userId: string, role: Role): Promise<{ ok: boolean; reason?: string }> {
   const m = await manager();
   if (!m.ok) return { ok: false, reason: m.reason };

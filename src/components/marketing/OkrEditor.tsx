@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { saveOkrs } from "@/lib/marketing/okr-actions";
 import type { Okrs } from "@/lib/marketing/okr";
+import EditGate from "./EditGate";
 
 type Scope = "company" | "linkedin" | "instagram" | "website";
 const SCOPES: { key: Scope; label: string }[] = [
@@ -12,7 +13,7 @@ const SCOPES: { key: Scope; label: string }[] = [
   { key: "website", label: "Website" },
 ];
 
-export default function OkrEditor({ initial }: { initial: Okrs }) {
+export default function OkrEditor({ initial, canEdit = true }: { initial: Okrs; canEdit?: boolean }) {
   const [okrs, setOkrs] = useState<Okrs>(initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -30,6 +31,7 @@ export default function OkrEditor({ initial }: { initial: Okrs }) {
   }
 
   return (
+    <EditGate canEdit={canEdit}>
     <div className="sw-card flex flex-col gap-4 p-5">
       <div className="flex items-center justify-between">
         <h3 className="text-[14px] font-medium">Objectives &amp; key results</h3>
@@ -75,5 +77,6 @@ export default function OkrEditor({ initial }: { initial: Okrs }) {
         measured against your live numbers.
       </p>
     </div>
+    </EditGate>
   );
 }

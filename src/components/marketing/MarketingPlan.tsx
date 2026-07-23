@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { savePlan } from "@/lib/marketing/plan-actions";
 import { PLAN_FIELDS, type MarketingPlan } from "@/lib/marketing/plan";
+import EditGate from "./EditGate";
 
-export default function MarketingPlanCard({ initial }: { initial: MarketingPlan }) {
+export default function MarketingPlanCard({ initial, canEdit = true }: { initial: MarketingPlan; canEdit?: boolean }) {
   const [plan, setPlan] = useState<MarketingPlan>(initial);
   const hasPlan = Object.values(initial).some((v) => v.trim());
   const [open, setOpen] = useState(!hasPlan); // open by default if empty
@@ -59,7 +60,9 @@ export default function MarketingPlanCard({ initial }: { initial: MarketingPlan 
       </button>
 
       {open && (
-        <div className="flex flex-col gap-4 border-t border-hairline px-6 py-5">
+        <div className="border-t border-hairline px-6 py-5">
+        <EditGate canEdit={canEdit}>
+        <div className="flex flex-col gap-4">
           {PLAN_FIELDS.map((f) => (
             <label key={f.key} className="flex flex-col gap-1.5">
               <span className="text-[11px] font-medium uppercase tracking-wider text-hint">{f.label}</span>
@@ -83,6 +86,8 @@ export default function MarketingPlanCard({ initial }: { initial: MarketingPlan 
             </button>
             {saved && !dirty && <span className="text-xs text-emerald-600">Saved</span>}
           </div>
+        </div>
+        </EditGate>
         </div>
       )}
     </div>

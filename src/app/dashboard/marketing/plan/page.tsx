@@ -6,12 +6,13 @@ import { getModule } from "@/lib/modules";
 import { getPlan } from "@/lib/marketing/plan-actions";
 import { getOkrs } from "@/lib/marketing/okr-actions";
 import { getUsageSummary } from "@/lib/marketing/ai-usage-actions";
+import { canEditModule } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function MarketingPlanPage() {
   const m = getModule("marketing")!;
-  const [plan, okrs, usage] = await Promise.all([getPlan(), getOkrs(), getUsageSummary()]);
+  const [plan, okrs, usage, canEdit] = await Promise.all([getPlan(), getOkrs(), getUsageSummary(), canEditModule("marketing")]);
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5">
       <ModuleHeader
@@ -19,9 +20,9 @@ export default async function MarketingPlanPage() {
         title="Marketing plan"
         subtitle="Your north star — objectives, targets, positioning, pillars and budget."
       />
-      <OkrEditor initial={okrs} />
+      <OkrEditor initial={okrs} canEdit={canEdit} />
       <AiUsageCard usage={usage} />
-      <MarketingPlanCard initial={plan} />
+      <MarketingPlanCard initial={plan} canEdit={canEdit} />
     </div>
   );
 }

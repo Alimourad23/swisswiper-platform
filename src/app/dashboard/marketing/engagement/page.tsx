@@ -7,6 +7,7 @@ import AutomationSettings from "@/components/marketing/AutomationSettings";
 import { channels } from "@/lib/marketing/channels";
 import { getEngagementView } from "@/lib/marketing/engagement-data";
 import { getAutomationPolicy } from "@/lib/marketing/automation-actions";
+import { canEditModule } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,13 +39,13 @@ export default function EngagementPage() {
 }
 
 async function EngagementData() {
-  const [view, policy] = await Promise.all([getEngagementView(), getAutomationPolicy()]);
+  const [view, policy, canEdit] = await Promise.all([getEngagementView(), getAutomationPolicy(), canEditModule("marketing")]);
 
   return (
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-3">
         <SectionHead n="01" title="Automation" note="what Alfred may send on his own" />
-        <AutomationSettings initial={policy} />
+        <AutomationSettings initial={policy} canEdit={canEdit} />
       </section>
 
       <section className="flex flex-col gap-3">

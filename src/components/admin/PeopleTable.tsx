@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { setUserRole, setUserTeam, setUserStatus, setUserAccess } from "@/lib/admin/actions";
+import { useRouter } from "next/navigation";
+import { setUserRole, setUserTeam, setUserStatus, setUserAccess, inviteUser } from "@/lib/admin/actions";
 import { ROLES, type Role, type AccessMap } from "@/lib/auth/roles";
 import type { Person, Team } from "@/lib/admin/types";
 import AccessEditor from "./AccessEditor";
@@ -10,13 +11,43 @@ import AccessEditor from "./AccessEditor";
    expand a Member to set their per-module access (which overrides the team). */
 
 export default function PeopleTable({ people: initial, teams, myRole }: { people: Person[]; teams: Team[]; myRole: Role }) {
+  const router = useRouter();
   const [people, setPeople] = useState<Person[]>(initial);
   const [openId, setOpenId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Invite form
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [invEmail, setInvEmail] = useState("");
+  const [invRole, setInvRole] = useState<Role>("member");
+  const [invTeam, setInvTeam] = useState<string>("");
+  const [inviting, setInviting] = useState(false);
+
   const patch = (id: string, p: Partial<Person>) => setPeople((all) => all.map((x) => (x.id === id ? { ...x, ...p } : x)));
-  const flash = (t: string) => { setMsg(t); setTimeout(() => setMsg((m) => (m === t ? null : m)), 2600); };
+  const flash = (t: string) => { setMsg(t); setTimeout(() => setMsg((m) => (m === t ? null : m)), 3200); };
   const teamOf = (id: string | null): Team | undefined => teams.find((t) => t.id === id);
+
+  async function sendInvite() {
+    const email = invEmail.trim();
+    if (!email || inviting) return;
+    setInviting(true);
+    const r = await inviteUser(email, invRole, invTeam || null);
+    setInviting(false);
+    if (r.ok) {
+      setInvEmail("");
+      setInviteOpen(false);
+      flash(`Invite sent to ${email}.`);
+      router.refresh(); // the new teammate appears in the list
+    } else {
+      flash(
+        r.reason === "bad_email" ? "That doesn't look like a valid email."
+        : r.reason === "exists" ? "Someone with that email already has an account."
+        : r.reason === "founder_only" ? "Only a founder can invite another founder."
+        : r.reason === "no_service_role" ? "Invites need the service-role key configured."
+        : "Couldn't send the invite — check email settings in Supabase.",
+      );
+    }
+  }
 
   async function changeRole(p: Person, role: Role) {
     const prev = p.role;
@@ -49,8 +80,54 @@ export default function PeopleTable({ people: initial, teams, myRole }: { people
           <h3 className="text-[14px] font-medium">People</h3>
           <p className="text-[11px] text-hint">{people.length} {people.length === 1 ? "person" : "people"} · role, team, access & status</p>
         </div>
-        {msg && <span className="text-[11px] font-medium text-[#b3261e]">{msg}</span>}
+        <div className="flex items-center gap-3">
+          {msg && <span className="text-[11px] font-medium text-peri-deep">{msg}</span>}
+          <button
+            type="button"
+            onClick={() => setInviteOpen((o) => !o)}
+            className="shrink-0 rounded-full bg-peri-deep px-3.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-peri-deeper"
+          >
+            {inviteOpen ? "Close" : "+ Invite"}
+          </button>
+        </div>
       </div>
+
+      {inviteOpen && (
+        <div className="border-b border-hairline bg-bg/40 px-5 py-4">
+          <p className="mb-2.5 text-[11px] text-hint">
+            Invite a teammate by email. They&apos;ll get a link to set a password and land with the role &amp; team you pick.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              value={invEmail}
+              onChange={(e) => setInvEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") sendInvite(); }}
+              placeholder="name@swisswiper.com"
+              className="min-w-[15rem] flex-1 rounded-[var(--radius-control)] border border-hairline bg-surface px-3 py-1.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-peri-deep"
+            />
+            <select value={invRole} onChange={(e) => setInvRole(e.target.value as Role)}
+              className="shrink-0 rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1.5 text-xs text-muted focus:outline-none">
+              {ROLES.map((r) => (
+                <option key={r.key} value={r.key} disabled={r.key === "founder" && myRole !== "founder"}>{r.label}</option>
+              ))}
+            </select>
+            <select value={invTeam} onChange={(e) => setInvTeam(e.target.value)}
+              className="shrink-0 rounded-[var(--radius-control)] border border-hairline bg-surface px-2 py-1.5 text-xs text-muted focus:outline-none">
+              <option value="">No team</option>
+              {teams.map((t) => (<option key={t.id} value={t.id}>{t.name}</option>))}
+            </select>
+            <button
+              type="button"
+              onClick={sendInvite}
+              disabled={inviting || !invEmail.trim()}
+              className="shrink-0 rounded-full bg-peri-deep px-4 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-peri-deeper disabled:opacity-50"
+            >
+              {inviting ? "Sending…" : "Send invite"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="divide-y divide-hairline">
         {people.length === 0 && <p className="px-5 py-6 text-center text-sm text-muted">No one has signed in yet.</p>}

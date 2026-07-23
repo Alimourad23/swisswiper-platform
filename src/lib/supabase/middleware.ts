@@ -34,10 +34,29 @@ export async function updateSession(request: NextRequest) {
 
   // Protect the dashboard, the Bridge and all their sub-pages.
   const path = request.nextUrl.pathname;
-  if (!user && (path.startsWith("/dashboard") || path.startsWith("/bridge"))) {
+  const onProtected = path.startsWith("/dashboard") || path.startsWith("/bridge");
+
+  if (!user && onProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
+  }
+
+  // Force sign-out for a deactivated teammate: the moment they hit a protected
+  // page, revoke their sessions (all devices) and bounce them to sign-in — so a
+  // deactivation takes effect immediately, not just on their next login.
+  if (user && onProtected) {
+    const { data: prof } = await supabase.from("profiles").select("status").eq("id", user.id).maybeSingle();
+    if (((prof as { status?: string } | null)?.status ?? "active") === "deactivated") {
+      await supabase.auth.signOut(); // global: clears this session's cookie + revokes refresh tokens
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "?deactivated=1";
+      const res = NextResponse.redirect(url);
+      // Carry the cookie-clearing (queued onto supabaseResponse by signOut) onto the redirect.
+      supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c.name, c.value, c));
+      return res;
+    }
   }
 
   return supabaseResponse;
