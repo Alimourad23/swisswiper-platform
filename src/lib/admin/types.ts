@@ -19,7 +19,16 @@ export type Team = { id: string; name: string; access: AccessMap };
 
 export type OrgSettings = { brandName: string; timezone: string; workingHours: string };
 
-export type AuditEntry = { id: string; actorName: string; action: string; detail: string | null; createdAt: string };
+export type AuditEntry = {
+  id: string;
+  actorName: string;
+  action: string;
+  module: string | null;
+  target: string | null;
+  before: string | null;
+  after: string | null;
+  createdAt: string;
+};
 
 export type PeopleView = {
   ok: boolean;

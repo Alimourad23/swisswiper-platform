@@ -34,11 +34,31 @@ export default async function AdminAuditPage() {
         ) : (
           <ul className="divide-y divide-hairline">
             {entries.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5">
-                <span className="text-[12.5px] font-medium text-ink">{e.actorName}</span>
-                <span className="text-[12.5px] text-muted">{e.action}</span>
-                {e.detail && <span className="text-[11px] text-hint">· {e.detail}</span>}
-                <span className="ml-auto shrink-0 text-[11px] text-hint">{when(e.createdAt)}</span>
+              <li key={e.id} className="flex flex-col gap-1 px-5 py-3">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[12.5px] font-medium text-ink">{e.actorName}</span>
+                  <span className="text-[12.5px] text-muted">{e.action.toLowerCase()}</span>
+                  {e.target && <span className="text-[12.5px] font-medium text-ink">{e.target}</span>}
+                  {e.module && (
+                    <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[10.5px] uppercase tracking-wide text-hint">
+                      {e.module}
+                    </span>
+                  )}
+                  <span className="ml-auto shrink-0 text-[11px] text-hint">{when(e.createdAt)}</span>
+                </div>
+                {(e.before || e.after) && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {e.before && (
+                      <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-600 line-through decoration-rose-300">
+                        {e.before}
+                      </span>
+                    )}
+                    {e.before && e.after && <span className="text-hint">→</span>}
+                    {e.after && (
+                      <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">{e.after}</span>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canEditModule } from "@/lib/auth/guard";
+import { logChange } from "@/lib/audit/log";
 import { DEFAULT_OKRS, withDefaults, type Okrs } from "@/lib/marketing/okr";
 
 /* The single shared OKR set (one row, id = 'okr'). Editable defaults: if nothing
@@ -30,6 +31,7 @@ export async function saveOkrs(okrs: Okrs): Promise<{ ok: boolean }> {
     { id: "okr", data: okrs, updated_at: new Date().toISOString(), updated_by: user.id },
     { onConflict: "id" },
   );
+  if (!error) await logChange({ action: "Updated OKRs", module: "marketing" });
   revalidatePath("/dashboard/marketing");
   revalidatePath("/dashboard/marketing/plan");
   return { ok: !error };

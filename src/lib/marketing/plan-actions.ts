@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canEditModule } from "@/lib/auth/guard";
+import { logChange } from "@/lib/audit/log";
 import { EMPTY_PLAN, type MarketingPlan } from "@/lib/marketing/plan";
 
 /* The single shared marketing plan (one row, id = 'plan'). */
@@ -42,6 +43,7 @@ export async function savePlan(plan: MarketingPlan): Promise<{ ok: boolean }> {
     },
     { onConflict: "id" },
   );
+  if (!error) await logChange({ action: "Updated marketing plan", module: "marketing" });
   revalidatePath("/dashboard/marketing");
   return { ok: !error };
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canEditModule } from "@/lib/auth/guard";
+import { logChange } from "@/lib/audit/log";
 import type { ContentPost, ContentStatus } from "@/lib/marketing/schedule";
 import { publishSingleInstagramPost } from "@/lib/marketing/publish";
 
@@ -53,6 +54,7 @@ export async function createPost(input: {
     })
     .select("id")
     .single();
+  if (!error) await logChange({ action: "Created post", module: "marketing", target: title });
   revalidatePath("/dashboard/marketing");
   return { ok: !error, id: (data as { id?: string } | null)?.id };
 }
@@ -108,7 +110,30 @@ export async function updatePost(
   if (fields.format !== undefined) patch.format = fields.format;
   if (fields.body !== undefined) patch.body = fields.body;
   if (fields.notes !== undefined) patch.notes = fields.notes;
+
+  // For a status change we log before → after, so read the current status first.
+  let prevStatus: string | null = null;
+  let postTitle: string | null = null;
+  if (fields.status !== undefined) {
+    const { data: cur } = await c.supabase
+      .from("content_posts")
+      .select("status, title")
+      .eq("id", id)
+      .maybeSingle();
+    prevStatus = (cur as { status?: string } | null)?.status ?? null;
+    postTitle = (cur as { title?: string } | null)?.title ?? null;
+  }
+
   const { error } = await c.supabase.from("content_posts").update(patch).eq("id", id);
+  if (!error && fields.status !== undefined && fields.status !== prevStatus) {
+    await logChange({
+      action: "Changed post status",
+      module: "marketing",
+      target: postTitle ?? id,
+      before: prevStatus,
+      after: fields.status,
+    });
+  }
   revalidatePath("/dashboard/marketing");
   return { ok: !error };
 }
@@ -123,6 +148,13 @@ export async function setAutoPublish(id: string, value: boolean): Promise<{ ok: 
     .from("content_posts")
     .update({ auto_publish: value, updated_at: new Date().toISOString() })
     .eq("id", id);
+  if (!error) {
+    await logChange({
+      action: value ? "Armed auto-publish" : "Disarmed auto-publish",
+      module: "marketing",
+      target: id,
+    });
+  }
   revalidatePath("/dashboard/marketing");
   return { ok: !error };
 }
@@ -131,7 +163,15 @@ export async function deletePost(id: string): Promise<{ ok: boolean }> {
   const c = await uid();
   if (!c) return { ok: false };
   if (!(await canEditModule("marketing"))) return { ok: false };
+  const { data: row } = await c.supabase.from("content_posts").select("title").eq("id", id).maybeSingle();
   const { error } = await c.supabase.from("content_posts").delete().eq("id", id);
+  if (!error) {
+    await logChange({
+      action: "Deleted post",
+      module: "marketing",
+      target: (row as { title?: string } | null)?.title ?? id,
+    });
+  }
   revalidatePath("/dashboard/marketing");
   return { ok: !error };
 }
@@ -147,6 +187,14 @@ export async function publishInstagramNow(
   if (!c) return { ok: false, error: "You're not signed in." };
   if (!(await canEditModule("marketing"))) return { ok: false, error: "You have view-only access to Marketing." };
   const res = await publishSingleInstagramPost(c.supabase, postId);
+  if (res.ok) {
+    await logChange({
+      action: "Published to Instagram",
+      module: "marketing",
+      target: postId,
+      after: res.permalink ?? null,
+    });
+  }
   revalidatePath("/dashboard/marketing");
   return res;
 }

@@ -58,13 +58,31 @@ async function manager(): Promise<Manager> {
   return { ok: true, admin, me: ctx };
 }
 
-async function audit(m: { admin: NonNullable<ReturnType<typeof createAdminClient>>; me: Me }, action: string, detail?: string) {
+type AuditOpts = { module?: string; target?: string | null; before?: string | null; after?: string | null };
+
+async function audit(m: { admin: NonNullable<ReturnType<typeof createAdminClient>>; me: Me }, action: string, opts: AuditOpts = {}) {
   try {
-    await m.admin.from("audit_log").insert({ actor_id: m.me.userId, actor_name: m.me.name, action, detail: detail ?? null });
+    await m.admin.from("audit_log").insert({
+      actor_id: m.me.userId,
+      actor_name: m.me.name,
+      action,
+      module: opts.module ?? "admin",
+      target: opts.target ?? null,
+      before: opts.before ?? null,
+      after: opts.after ?? null,
+    });
   } catch {
     /* audit is best-effort */
   }
 }
+
+/* Readable label for a target user (name → email → id). */
+async function nameOf(admin: NonNullable<ReturnType<typeof createAdminClient>>, userId: string): Promise<string> {
+  const { data } = await admin.from("profiles").select("full_name, email").eq("id", userId).maybeSingle();
+  const p = data as { full_name?: string; email?: string } | null;
+  return p?.full_name || p?.email || userId;
+}
+const teamNameOf = (teams: { id: string; name: string }[], id: string | null) => (id ? teams.find((t) => t.id === id)?.name ?? "a team" : "no team");
 
 /* ---- Current user ---------------------------------------------------- */
 
@@ -123,7 +141,7 @@ export async function setUserRole(userId: string, role: Role): Promise<{ ok: boo
     return { ok: false, reason: "founder_only" };
   }
   await m.admin.from("profiles").upsert({ id: userId, role, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  await audit(m, `Set role → ${role}`, userId);
+  await audit(m, "Changed role", { target: await nameOf(m.admin, userId), before: curRole, after: role });
   revalidatePath("/dashboard/admin");
   return { ok: true };
 }
@@ -131,8 +149,17 @@ export async function setUserRole(userId: string, role: Role): Promise<{ ok: boo
 export async function setUserTeam(userId: string, teamId: string | null): Promise<{ ok: boolean; reason?: string }> {
   const m = await manager();
   if (!m.ok) return { ok: false, reason: m.reason };
+  const [{ data: prev }, { data: teamRows }] = await Promise.all([
+    m.admin.from("profiles").select("team_id").eq("id", userId).maybeSingle(),
+    m.admin.from("teams").select("id, name"),
+  ]);
+  const teams = (teamRows ?? []) as { id: string; name: string }[];
   await m.admin.from("profiles").upsert({ id: userId, team_id: teamId, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  await audit(m, teamId ? "Assigned to team" : "Removed from team", userId);
+  await audit(m, "Changed team", {
+    target: await nameOf(m.admin, userId),
+    before: teamNameOf(teams, (prev as { team_id?: string } | null)?.team_id ?? null),
+    after: teamNameOf(teams, teamId),
+  });
   revalidatePath("/dashboard/admin");
   return { ok: true };
 }
@@ -146,7 +173,11 @@ export async function setUserStatus(userId: string, status: "active" | "deactiva
     return { ok: false, reason: "founder_only" };
   }
   await m.admin.from("profiles").upsert({ id: userId, status, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  await audit(m, status === "deactivated" ? "Deactivated user" : "Reactivated user", userId);
+  await audit(m, status === "deactivated" ? "Deactivated" : "Reactivated", {
+    target: await nameOf(m.admin, userId),
+    before: status === "deactivated" ? "active" : "deactivated",
+    after: status,
+  });
   revalidatePath("/dashboard/admin");
   return { ok: true };
 }
@@ -168,8 +199,10 @@ export async function setTeamAccess(teamId: string, access: AccessMap): Promise<
   const m = await manager();
   if (!m.ok) return { ok: false, reason: m.reason };
   const safe = cleanAccessMap(access);
+  const { data: prevT } = await m.admin.from("teams").select("access, name").eq("id", teamId).maybeSingle();
+  const prev = prevT as { access?: unknown; name?: string } | null;
   await m.admin.from("teams").update({ access: safe }).eq("id", teamId);
-  await audit(m, "Set team access template", summarizeAccess(safe));
+  await audit(m, "Changed team access", { target: prev?.name ?? "team", before: summarizeAccess(cleanAccessMap(prev?.access)), after: summarizeAccess(safe) });
   revalidatePath("/dashboard/admin/teams");
   revalidatePath("/dashboard/admin");
   return { ok: true };
@@ -181,7 +214,7 @@ export async function createTeam(name: string): Promise<{ ok: boolean; reason?: 
   const clean = name.trim();
   if (!clean) return { ok: false, reason: "empty" };
   await m.admin.from("teams").insert({ name: clean });
-  await audit(m, "Created team", clean);
+  await audit(m, "Created team", { target: clean });
   revalidatePath("/dashboard/admin/teams");
   return { ok: true };
 }
@@ -192,7 +225,7 @@ export async function renameTeam(id: string, name: string): Promise<{ ok: boolea
   const clean = name.trim();
   if (!clean) return { ok: false, reason: "empty" };
   await m.admin.from("teams").update({ name: clean }).eq("id", id);
-  await audit(m, "Renamed team", clean);
+  await audit(m, "Renamed team", { target: clean });
   revalidatePath("/dashboard/admin/teams");
   return { ok: true };
 }
@@ -203,7 +236,7 @@ export async function deleteTeam(id: string): Promise<{ ok: boolean; reason?: st
   // Unassign anyone on this team first, then remove it.
   await m.admin.from("profiles").update({ team_id: null }).eq("team_id", id);
   await m.admin.from("teams").delete().eq("id", id);
-  await audit(m, "Deleted team", id);
+  await audit(m, "Deleted team", { target: id });
   revalidatePath("/dashboard/admin/teams");
   return { ok: true };
 }
@@ -216,8 +249,10 @@ export async function setUserAccess(userId: string, access: AccessMap): Promise<
   const m = await manager();
   if (!m.ok) return { ok: false, reason: m.reason };
   const safe = cleanAccessMap(access);
+  const { data: prevRow } = await m.admin.from("profiles").select("access").eq("id", userId).maybeSingle();
+  const before = summarizeAccess(cleanAccessMap((prevRow as { access?: unknown } | null)?.access));
   await m.admin.from("profiles").upsert({ id: userId, access: safe, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  await audit(m, "Set access", `${userId} → ${summarizeAccess(safe)}`);
+  await audit(m, "Changed access", { target: await nameOf(m.admin, userId), before, after: summarizeAccess(safe) });
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/admin/access");
   return { ok: true };
@@ -245,25 +280,31 @@ export async function saveOrgSettings(s: OrgSettings): Promise<{ ok: boolean; re
   await m.admin
     .from("admin_config")
     .upsert({ id: "org", data: safe, updated_at: new Date().toISOString(), updated_by: m.me.userId }, { onConflict: "id" });
-  await audit(m, "Updated org settings");
+  await audit(m, "Updated org settings", { after: `${safe.brandName} · ${safe.timezone} · ${safe.workingHours}` });
   revalidatePath("/dashboard/admin/settings");
   return { ok: true };
 }
 
 /* ---- Audit log ------------------------------------------------------- */
 
-export async function getAuditLog(limit = 100): Promise<AuditEntry[]> {
+export async function getAuditLog(limit = 150): Promise<AuditEntry[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("audit_log")
-    .select("id, actor_name, action, detail, created_at")
+    .select("id, actor_name, action, module, target, before, after, created_at")
     .order("created_at", { ascending: false })
     .limit(limit);
-  return ((data ?? []) as { id: string; actor_name: string; action: string; detail: string | null; created_at: string }[]).map((r) => ({
+  return ((data ?? []) as {
+    id: string; actor_name: string; action: string;
+    module: string | null; target: string | null; before: string | null; after: string | null; created_at: string;
+  }[]).map((r) => ({
     id: r.id,
     actorName: r.actor_name,
     action: r.action,
-    detail: r.detail,
+    module: r.module,
+    target: r.target,
+    before: r.before,
+    after: r.after,
     createdAt: r.created_at,
   }));
 }

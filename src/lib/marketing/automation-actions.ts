@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canEditModule } from "@/lib/auth/guard";
+import { logChange } from "@/lib/audit/log";
 import { DEFAULT_POLICY, normalizePolicy, type AutomationPolicy } from "@/lib/marketing/automation";
 
 /* The single shared automation policy (one row, id = 'policy'). Defaults to
@@ -31,6 +32,7 @@ export async function saveAutomationPolicy(policy: AutomationPolicy): Promise<{ 
     { id: "policy", data: safe, updated_at: new Date().toISOString(), updated_by: user.id },
     { onConflict: "id" },
   );
+  if (!error) await logChange({ action: "Updated automation policy", module: "marketing" });
   revalidatePath("/dashboard/marketing/engagement");
   return { ok: !error };
 }
