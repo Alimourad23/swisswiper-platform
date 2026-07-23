@@ -3,6 +3,7 @@ import InstagramDashboard from "@/components/marketing/InstagramDashboard";
 import { getInstagramAnalytics } from "@/lib/marketing/instagram-data";
 import { instagramObjectives } from "@/lib/marketing/channel-okr";
 import { getPlannedFor } from "@/lib/marketing/schedule-actions";
+import { canEditModule } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -36,9 +37,10 @@ async function Data({ params }: { params: Promise<{ section: string }> }) {
     );
   }
 
-  const [objectives, planned] = await Promise.all([
+  const [objectives, planned, canEdit] = await Promise.all([
     instagramObjectives(data.followers, data.reach28),
     getPlannedFor("instagram"),
+    canEditModule("marketing"),
   ]);
-  return <InstagramDashboard data={data} section={section} objectives={objectives} planned={planned} />;
+  return <InstagramDashboard data={data} section={section} objectives={objectives} planned={planned} canEdit={canEdit} />;
 }

@@ -25,7 +25,7 @@ type Engager = { id: string; name: string; note: string | null };
 export type PlannedPost = { title: string; scheduled_for: string | null; status: string; format: string };
 type Props = {
   metrics: LinkedInMetrics; inquiries: number; source: string; capturedAt: string;
-  engagers: Engager[]; section?: string; objectives?: Objective[]; planned?: PlannedPost[];
+  engagers: Engager[]; section?: string; objectives?: Objective[]; planned?: PlannedPost[]; canEdit?: boolean;
 };
 
 function delta(cur: number, prev: number): { text: string; good: boolean } | null {
@@ -79,7 +79,7 @@ function downloadHtml(filename: string, html: string) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
-export default function LinkedInDashboard({ metrics, inquiries, source, capturedAt, engagers, section = "overview", objectives, planned = [] }: Props) {
+export default function LinkedInDashboard({ metrics, inquiries, source, capturedAt, engagers, section = "overview", objectives, planned = [], canEdit = true }: Props) {
   const [days, setDays] = useState(365);
   const [cWin, setCWin] = useState(365); // Content timeline filter (days; 0 = all)
   const a = windowAgg(metrics, days);
@@ -338,7 +338,7 @@ export default function LinkedInDashboard({ metrics, inquiries, source, captured
               <button key={d} className={d === days ? "on" : ""} onClick={() => setDays(d)}>{d === 365 ? "365d" : d + "d"}</button>
             ))}
           </div>
-          <CreatePostButton channel="linkedin" />
+          {canEdit && <CreatePostButton channel="linkedin" />}
         </div>
       </div>
 

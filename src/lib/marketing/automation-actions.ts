@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { canEditModule } from "@/lib/auth/guard";
 import { DEFAULT_POLICY, normalizePolicy, type AutomationPolicy } from "@/lib/marketing/automation";
 
 /* The single shared automation policy (one row, id = 'policy'). Defaults to
@@ -23,6 +24,7 @@ export async function saveAutomationPolicy(policy: AutomationPolicy): Promise<{ 
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   // Re-normalize server-side so locked categories can never be forced to auto.
   const safe = normalizePolicy(policy);
   const { error } = await supabase.from("marketing_automation").upsert(

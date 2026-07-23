@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { canEditModule } from "@/lib/auth/guard";
 import { DEFAULT_OKRS, withDefaults, type Okrs } from "@/lib/marketing/okr";
 
 /* The single shared OKR set (one row, id = 'okr'). Editable defaults: if nothing
@@ -24,6 +25,7 @@ export async function saveOkrs(okrs: Okrs): Promise<{ ok: boolean }> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   const { error } = await supabase.from("marketing_okrs").upsert(
     { id: "okr", data: okrs, updated_at: new Date().toISOString(), updated_by: user.id },
     { onConflict: "id" },

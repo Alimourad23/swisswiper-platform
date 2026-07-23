@@ -59,7 +59,7 @@ function downloadHtml(filename: string, html: string) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
-export default function InstagramDashboard({ data, section = "overview", objectives, planned = [] }: { data: IgData; section?: string; objectives?: Objective[]; planned?: PlannedPost[] }) {
+export default function InstagramDashboard({ data, section = "overview", objectives, planned = [], canEdit = true }: { data: IgData; section?: string; objectives?: Objective[]; planned?: PlannedPost[]; canEdit?: boolean }) {
   const [cWin, setCWin] = useState(365); // Content timeline filter (days; 0 = all)
   const kpis: { label: string; value: string; note?: string }[] = [
     { label: "Followers", value: fmt(data.followers), note: growthNote(data) },
@@ -310,7 +310,7 @@ export default function InstagramDashboard({ data, section = "overview", objecti
         <h1 className="mc-h1"><InstagramLogo size={18} /> Instagram <span>@{data.username} · live from Instagram</span></h1>
         <div className="mc-right">
           <span className="mc-badge pink">Live API</span>
-          <CreatePostButton channel="instagram" />
+          {canEdit && <CreatePostButton channel="instagram" />}
         </div>
       </div>
 

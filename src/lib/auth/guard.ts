@@ -65,3 +65,11 @@ export async function guardModule(key: string): Promise<void> {
   if (a.status === "deactivated") redirect("/dashboard/overview"); // layout shows the blocked screen
   if ((a.levels[key] ?? "hidden") === "hidden") redirect("/dashboard/overview");
 }
+
+/* May the signed-in user WRITE in this module? Used to gate mutating server
+   actions so "View" is genuinely read-only (founders & baseline modules = edit). */
+export async function canEditModule(key: string): Promise<boolean> {
+  const a = await getAccess();
+  if (!a.userId || a.status === "deactivated") return false;
+  return (a.levels[key] ?? "hidden") === "edit";
+}

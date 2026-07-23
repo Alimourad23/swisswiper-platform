@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { canEditModule } from "@/lib/auth/guard";
 import { EMPTY_PLAN, type MarketingPlan } from "@/lib/marketing/plan";
 
 /* The single shared marketing plan (one row, id = 'plan'). */
@@ -26,6 +27,7 @@ export async function savePlan(plan: MarketingPlan): Promise<{ ok: boolean }> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   const { error } = await supabase.from("marketing_plan").upsert(
     {
       id: "plan",

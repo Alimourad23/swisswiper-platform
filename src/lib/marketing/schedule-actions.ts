@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { canEditModule } from "@/lib/auth/guard";
 import type { ContentPost, ContentStatus } from "@/lib/marketing/schedule";
 import { publishSingleInstagramPost } from "@/lib/marketing/publish";
 
-/* Server actions for the content schedule. Team-collaborative (RLS lets any
-   teammate read/edit). Types + constants live in `schedule.ts`. */
+/* Server actions for the content schedule. Reads are open to anyone with access
+   to Marketing; writes require EDIT on Marketing (canEditModule), so a View-only
+   member can never create, change, delete or publish — even via the API. */
 
 async function uid(): Promise<{ supabase: Awaited<ReturnType<typeof createClient>>; id: string } | null> {
   const supabase = await createClient();
@@ -36,6 +38,7 @@ export async function createPost(input: {
 }): Promise<{ ok: boolean; id?: string }> {
   const c = await uid();
   if (!c) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   const title = input.title.trim();
   if (!title) return { ok: false };
   const { data, error } = await c.supabase
@@ -69,6 +72,7 @@ export async function createPostsBulk(
 ): Promise<{ ok: boolean; added: number }> {
   const c = await uid();
   if (!c) return { ok: false, added: 0 };
+  if (!(await canEditModule("marketing"))) return { ok: false, added: 0 };
   const rows = items
     .filter((it) => it.title.trim())
     .map((it) => ({
@@ -95,6 +99,7 @@ export async function updatePost(
 ): Promise<{ ok: boolean }> {
   const c = await uid();
   if (!c) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (fields.title !== undefined) patch.title = fields.title;
   if (fields.channel !== undefined) patch.channel = fields.channel;
@@ -113,6 +118,7 @@ export async function updatePost(
 export async function setAutoPublish(id: string, value: boolean): Promise<{ ok: boolean }> {
   const c = await uid();
   if (!c) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   const { error } = await c.supabase
     .from("content_posts")
     .update({ auto_publish: value, updated_at: new Date().toISOString() })
@@ -124,6 +130,7 @@ export async function setAutoPublish(id: string, value: boolean): Promise<{ ok: 
 export async function deletePost(id: string): Promise<{ ok: boolean }> {
   const c = await uid();
   if (!c) return { ok: false };
+  if (!(await canEditModule("marketing"))) return { ok: false };
   const { error } = await c.supabase.from("content_posts").delete().eq("id", id);
   revalidatePath("/dashboard/marketing");
   return { ok: !error };
@@ -138,6 +145,7 @@ export async function publishInstagramNow(
 ): Promise<{ ok: boolean; permalink?: string | null; error?: string }> {
   const c = await uid();
   if (!c) return { ok: false, error: "You're not signed in." };
+  if (!(await canEditModule("marketing"))) return { ok: false, error: "You have view-only access to Marketing." };
   const res = await publishSingleInstagramPost(c.supabase, postId);
   revalidatePath("/dashboard/marketing");
   return res;

@@ -3,6 +3,7 @@ import type { Engager } from "@/components/marketing/NotableEngagers";
 import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { linkedinObjectives } from "@/lib/marketing/channel-okr";
 import { getPlannedFor } from "@/lib/marketing/schedule-actions";
+import { canEditModule } from "@/lib/auth/guard";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +35,12 @@ async function getInquiries(): Promise<number> {
 export default async function LinkedInSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
   const { metrics, source, capturedAt } = await getLinkedInMetrics();
-  const [engagers, inquiries, objectives, planned] = await Promise.all([
+  const [engagers, inquiries, objectives, planned, canEdit] = await Promise.all([
     getEngagers(),
     getInquiries(),
     linkedinObjectives(metrics),
     getPlannedFor("linkedin"),
+    canEditModule("marketing"),
   ]);
 
   return (
@@ -52,6 +54,7 @@ export default async function LinkedInSectionPage({ params }: { params: Promise<
         section={section}
         objectives={objectives}
         planned={planned}
+        canEdit={canEdit}
       />
     </div>
   );
