@@ -26,7 +26,8 @@ import type { Objective } from "@/lib/marketing/okr";
    Styling is scoped to `.mc-*` classes so it can't collide with the app.
    ──────────────────────────────────────────────────────────────────────── */
 
-export type IgLite = { username: string; followers: number; mediaCount: number; reach28: number | null; avgEngagementPerPost: number } | null;
+export type IgTop = { title: string; permalink: string; mediaType: string; likes: number; comments: number; engagement: number };
+export type IgLite = { username: string; followers: number; mediaCount: number; reach28: number | null; avgEngagementPerPost: number; topPosts?: IgTop[] } | null;
 
 type Props = {
   metrics: LinkedInMetrics;
@@ -233,6 +234,43 @@ export default function MarketingCockpit({ metrics, ig, posts, plan, objectives,
               )) : <p className="mc-soft" style={{ fontSize: 11, marginTop: 8 }}>Upload a LinkedIn export to see top posts.</p>}
             </div>
           </div>
+
+          {/* instagram — reach + top posts (only when connected) */}
+          {ig && (
+            <div className="mc-card mc-panel">
+              <div className="mc-ph">
+                <div><h3>Instagram</h3><p className="mc-sub">@{ig.username} · live from the API</p></div>
+                <a className="mc-viewall" href="/dashboard/marketing/instagram">Open →</a>
+              </div>
+              <div className="mc-statgrid" style={{ marginTop: 2 }}>
+                <div className="mc-stat"><span className="mc-sv">{ig.reach28 != null ? nf(ig.reach28) : "—"}</span><span className="mc-sl">Reach · 28d</span></div>
+                <div className="mc-stat"><span className="mc-sv">{ig.avgEngagementPerPost ? ig.avgEngagementPerPost.toFixed(1) : "—"}</span><span className="mc-sl">Avg eng / post</span></div>
+              </div>
+              <div style={{ marginTop: 8, borderTop: "1px solid var(--mc-hair)", paddingTop: 6 }}>
+                <p className="mc-sub" style={{ marginBottom: 4 }}>Top posts · by engagement</p>
+                {ig.topPosts && ig.topPosts.length ? (
+                  ig.topPosts.slice(0, 3).map((p, i) => (
+                    <a
+                      key={i}
+                      className="mc-act"
+                      href={p.permalink || "#"}
+                      target="_blank"
+                      rel="noopener"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <span className="mc-t">
+                        <span className="mc-dot" style={{ background: "var(--s-instagram)" }} />
+                        {p.title}
+                      </span>
+                      <span className="mc-m" style={{ marginLeft: "auto" }}>{nf(p.engagement)}</span>
+                    </a>
+                  ))
+                ) : (
+                  <p className="mc-soft" style={{ fontSize: 11 }}>No posts in the recent window yet.</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* format performance */}
           <div className="mc-card mc-panel">

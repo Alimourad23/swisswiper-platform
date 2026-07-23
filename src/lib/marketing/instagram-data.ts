@@ -157,9 +157,33 @@ export async function getInstagramLite(): Promise<IgLite> {
 /* Mid-weight pulse for the Marketing cockpit — followers + 28-day reach + average
    engagement per post, in ~3 API calls (no per-post insights). Enough to show a
    real Instagram row in the executive summary without the full analytics cost. */
+export type IgTopPost = {
+  title: string;
+  permalink: string;
+  mediaType: string;
+  likes: number;
+  comments: number;
+  engagement: number;
+};
+
 export type IgPulse =
-  | { username: string; followers: number; mediaCount: number; reach28: number | null; avgEngagementPerPost: number }
+  | {
+      username: string;
+      followers: number;
+      mediaCount: number;
+      reach28: number | null;
+      avgEngagementPerPost: number;
+      topPosts: IgTopPost[];
+    }
   | null;
+
+/* Turn a caption into a short, readable title (first line, trimmed). */
+function captionTitle(caption: string): string {
+  const first = (caption || "").split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
+  const clean = first.replace(/\s+/g, " ").trim();
+  if (!clean) return "(no caption)";
+  return clean.length > 64 ? clean.slice(0, 63).trimEnd() + "…" : clean;
+}
 
 export async function getInstagramPulse(): Promise<IgPulse> {
   if (!(await hasInstagramConnection())) return null;
@@ -169,7 +193,29 @@ export async function getInstagramPulse(): Promise<IgPulse> {
     const totalLikes = media.reduce((n, m) => n + m.likeCount, 0);
     const totalComments = media.reduce((n, m) => n + m.commentsCount, 0);
     const avgEngagementPerPost = media.length ? Math.round(((totalLikes + totalComments) / media.length) * 10) / 10 : 0;
-    return { username: s.username, followers: s.followersCount, mediaCount: s.mediaCount, reach28, avgEngagementPerPost };
+
+    // Top posts by engagement (likes + comments) — derived from media already
+    // fetched above, so this costs no extra API calls.
+    const topPosts: IgTopPost[] = media
+      .map((m) => ({
+        title: captionTitle(m.caption),
+        permalink: m.permalink,
+        mediaType: m.mediaType,
+        likes: m.likeCount,
+        comments: m.commentsCount,
+        engagement: m.likeCount + m.commentsCount,
+      }))
+      .sort((a, b) => b.engagement - a.engagement)
+      .slice(0, 3);
+
+    return {
+      username: s.username,
+      followers: s.followersCount,
+      mediaCount: s.mediaCount,
+      reach28,
+      avgEngagementPerPost,
+      topPosts,
+    };
   } catch {
     return null;
   }
