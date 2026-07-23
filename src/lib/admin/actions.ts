@@ -6,11 +6,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   normalizeRole,
   isManager,
-  withAccessDefaults,
+  cleanAccessMap,
+  GATED_MODULES,
   type Role,
-  type AccessPolicy,
+  type AccessMap,
 } from "@/lib/auth/roles";
 import type { Person, Team, OrgSettings, AuditEntry, PeopleView } from "@/lib/admin/types";
+
+/* Short human summary of an access map for the audit log. */
+function summarizeAccess(a: AccessMap): string {
+  const parts = GATED_MODULES.map((m) => `${m.label}=${a[m.key] ?? "hidden"}`);
+  return parts.join(", ");
+}
 
 /* Admin / control-panel server actions. Every privileged operation:
    1) verifies the CALLER is a founder/admin (via the normal session client), then
@@ -74,12 +81,12 @@ export async function getPeople(): Promise<PeopleView> {
 
   const [{ data: list }, { data: profs }, { data: teamRows }] = await Promise.all([
     m.admin.auth.admin.listUsers(),
-    m.admin.from("profiles").select("id, role, status, team_id, full_name, email"),
-    m.admin.from("teams").select("id, name").order("created_at"),
+    m.admin.from("profiles").select("id, role, status, team_id, full_name, email, access"),
+    m.admin.from("teams").select("id, name, access").order("created_at"),
   ]);
 
   const pmap = new Map(
-    ((profs ?? []) as { id: string; role?: string; status?: string; team_id?: string; full_name?: string; email?: string }[]).map((p) => [p.id, p]),
+    ((profs ?? []) as { id: string; role?: string; status?: string; team_id?: string; full_name?: string; email?: string; access?: unknown }[]).map((p) => [p.id, p]),
   );
 
   const people: Person[] = (list?.users ?? []).map((u) => {
@@ -92,12 +99,17 @@ export async function getPeople(): Promise<PeopleView> {
       role: normalizeRole(p?.role),
       status: p?.status || "active",
       teamId: p?.team_id ?? null,
+      access: cleanAccessMap(p?.access),
       lastSignIn: u.last_sign_in_at ?? null,
       isSelf: u.id === m.me.userId,
     };
   });
 
-  const teams = ((teamRows ?? []) as Team[]);
+  const teams = ((teamRows ?? []) as { id: string; name: string; access?: unknown }[]).map((t) => ({
+    id: t.id,
+    name: t.name,
+    access: cleanAccessMap(t.access),
+  }));
   return { ok: true, people, teams };
 }
 
@@ -143,8 +155,24 @@ export async function setUserStatus(userId: string, status: "active" | "deactiva
 
 export async function getTeams(): Promise<Team[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("teams").select("id, name").order("created_at");
-  return (data ?? []) as Team[];
+  const { data } = await supabase.from("teams").select("id, name, access").order("created_at");
+  return ((data ?? []) as { id: string; name: string; access?: unknown }[]).map((t) => ({
+    id: t.id,
+    name: t.name,
+    access: cleanAccessMap(t.access),
+  }));
+}
+
+/* Per-team access template — the default Hidden/View/Edit for its members. */
+export async function setTeamAccess(teamId: string, access: AccessMap): Promise<{ ok: boolean; reason?: string }> {
+  const m = await manager();
+  if (!m.ok) return { ok: false, reason: m.reason };
+  const safe = cleanAccessMap(access);
+  await m.admin.from("teams").update({ access: safe }).eq("id", teamId);
+  await audit(m, "Set team access template", summarizeAccess(safe));
+  revalidatePath("/dashboard/admin/teams");
+  revalidatePath("/dashboard/admin");
+  return { ok: true };
 }
 
 export async function createTeam(name: string): Promise<{ ok: boolean; reason?: string }> {
@@ -180,22 +208,17 @@ export async function deleteTeam(id: string): Promise<{ ok: boolean; reason?: st
   return { ok: true };
 }
 
-/* ---- Access policy --------------------------------------------------- */
+/* ---- Per-person access ----------------------------------------------- */
 
-export async function getAccessPolicy(): Promise<AccessPolicy> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("admin_config").select("data").eq("id", "access").maybeSingle();
-  return withAccessDefaults((data as { data?: Partial<AccessPolicy> } | null)?.data ?? null);
-}
-
-export async function saveAccessPolicy(policy: AccessPolicy): Promise<{ ok: boolean; reason?: string }> {
+/* A person's own per-module overrides (win over their team template). Pass an
+   empty map for a module to clear its override and fall back to the team. */
+export async function setUserAccess(userId: string, access: AccessMap): Promise<{ ok: boolean; reason?: string }> {
   const m = await manager();
   if (!m.ok) return { ok: false, reason: m.reason };
-  const safe = withAccessDefaults(policy);
-  await m.admin
-    .from("admin_config")
-    .upsert({ id: "access", data: safe, updated_at: new Date().toISOString(), updated_by: m.me.userId }, { onConflict: "id" });
-  await audit(m, "Updated access policy");
+  const safe = cleanAccessMap(access);
+  await m.admin.from("profiles").upsert({ id: userId, access: safe, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  await audit(m, "Set access", `${userId} → ${summarizeAccess(safe)}`);
+  revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/admin/access");
   return { ok: true };
 }

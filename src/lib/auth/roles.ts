@@ -1,28 +1,30 @@
-/* Role model for the admin / control panel. Pure + client-importable (no server
-   imports) so both the sidebar and the admin UI can use it. Fixed tiers:
-   Founder > Admin > Member > Viewer. */
+/* Access model for the admin / control panel. Pure + client-importable.
 
-export type Role = "founder" | "admin" | "member" | "viewer";
+   Two roles:
+   - Founder  = super-admin. Sees and does everything, and runs this panel.
+   - Member   = access is set PER MODULE (Hidden / View / Edit), from their
+                team's template and/or a per-person override.
+
+   Everyone — regardless of role — always has the BASELINE modules
+   (Overview, Emails, Calendar, Tasks, and Alfred). Those are non-negotiable. */
+
+export type Role = "founder" | "member";
 
 export const ROLES: { key: Role; label: string; blurb: string }[] = [
-  { key: "founder", label: "Founder", blurb: "Full control of everything, including this admin panel." },
-  { key: "admin", label: "Admin", blurb: "Manage people, access and settings — everything except founder-only actions." },
-  { key: "member", label: "Member", blurb: "Works in the modules they're given access to." },
-  { key: "viewer", label: "Viewer", blurb: "Read-only in the modules they're given access to." },
+  { key: "founder", label: "Founder", blurb: "Super-admin — full access to everything, including this panel." },
+  { key: "member", label: "Member", blurb: "Access is set per module (Hidden / View / Edit), by team or per person." },
 ];
 
-export const ROLE_RANK: Record<Role, number> = { founder: 3, admin: 2, member: 1, viewer: 0 };
-
 export function normalizeRole(r: string | null | undefined): Role {
-  return r === "founder" || r === "admin" || r === "member" || r === "viewer" ? r : "member";
+  return r === "founder" ? "founder" : "member";
 }
 
-/** Can this role manage the admin panel (people, access, settings)? */
+/** Founders run the admin panel and bypass all module access. */
 export function isManager(role: Role): boolean {
-  return role === "founder" || role === "admin";
+  return role === "founder";
 }
 
-/* Modules that can be gated per role — keep in sync with the sidebar. */
+/* All modules that appear in the sidebar. */
 export const MODULES: { key: string; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "emails", label: "Emails" },
@@ -33,27 +35,51 @@ export const MODULES: { key: string; label: string }[] = [
   { key: "orders", label: "Orders" },
 ];
 
-/** role → allowed module keys. Founder is always all (not stored). */
-export type AccessPolicy = Record<Role, string[]>;
+/* Always-on for everyone — never gated. (Alfred is always available too.) */
+export const BASELINE_MODULE_KEYS = ["overview", "emails", "calendar", "tasks"];
 
-export const DEFAULT_ACCESS: AccessPolicy = {
-  founder: MODULES.map((m) => m.key),
-  admin: MODULES.map((m) => m.key),
-  member: ["overview", "tasks", "calendar", "marketing"],
-  viewer: ["overview"],
-};
+/* The modules whose access you actually control per person / per team. */
+export const GATED_MODULES = MODULES.filter((m) => !BASELINE_MODULE_KEYS.includes(m.key));
 
-/** Fill any missing role with defaults; founder always gets everything. */
-export function withAccessDefaults(p: Partial<AccessPolicy> | null | undefined): AccessPolicy {
-  return {
-    founder: MODULES.map((m) => m.key),
-    admin: p?.admin ?? DEFAULT_ACCESS.admin,
-    member: p?.member ?? DEFAULT_ACCESS.member,
-    viewer: p?.viewer ?? DEFAULT_ACCESS.viewer,
-  };
+export type Level = "hidden" | "view" | "edit";
+
+export const LEVELS: { key: Level; label: string }[] = [
+  { key: "hidden", label: "Hidden" },
+  { key: "view", label: "View" },
+  { key: "edit", label: "Edit" },
+];
+
+/** A map of gated moduleKey → level. Missing key = hidden (member) / edit (founder). */
+export type AccessMap = Record<string, Level>;
+
+/* Resolve the effective level for EVERY module, given a person's role, their own
+   override map, and their team's template map. Person override wins over team,
+   team over the default (hidden). */
+export function effectiveLevels(role: Role, person: AccessMap | null, team: AccessMap | null): Record<string, Level> {
+  const out: Record<string, Level> = {};
+  for (const m of MODULES) {
+    if (BASELINE_MODULE_KEYS.includes(m.key)) { out[m.key] = "edit"; continue; }
+    if (role === "founder") { out[m.key] = "edit"; continue; }
+    out[m.key] = person?.[m.key] ?? team?.[m.key] ?? "hidden";
+  }
+  return out;
 }
 
-export function canAccess(policy: AccessPolicy, role: Role, moduleKey: string): boolean {
-  if (role === "founder") return true;
-  return (policy[role] ?? []).includes(moduleKey);
+/** Module keys that are at least visible (View or Edit). */
+export function visibleModules(levels: Record<string, Level>): string[] {
+  return Object.entries(levels)
+    .filter(([, l]) => l !== "hidden")
+    .map(([k]) => k);
+}
+
+/** Keep only valid gated-module levels (drops junk / baseline keys). */
+export function cleanAccessMap(raw: unknown): AccessMap {
+  const out: AccessMap = {};
+  if (raw && typeof raw === "object") {
+    for (const m of GATED_MODULES) {
+      const v = (raw as Record<string, unknown>)[m.key];
+      if (v === "hidden" || v === "view" || v === "edit") out[m.key] = v;
+    }
+  }
+  return out;
 }
