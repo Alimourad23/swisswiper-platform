@@ -4,6 +4,18 @@
 
 export type ContentStatus = "idea" | "draft" | "scheduled" | "published";
 
+/* Approval sign-off, separate from the pipeline status:
+   none (draft, not submitted) → pending (submitted) → approved, or → changes
+   (a founder asked for edits). Publishing requires 'approved'. */
+export type ApprovalStatus = "none" | "pending" | "approved" | "changes";
+
+export const APPROVAL_LABELS: Record<ApprovalStatus, string> = {
+  none: "Draft",
+  pending: "Awaiting approval",
+  approved: "Approved",
+  changes: "Changes requested",
+};
+
 export type ContentPost = {
   id: string;
   created_by: string;
@@ -26,6 +38,14 @@ export type ContentPost = {
   source?: string | null;
   /** Instagram only: publish automatically on the scheduled date via the daily cron. */
   auto_publish?: boolean | null;
+  /** Approval sign-off — publishing is blocked until this is 'approved'. */
+  approval_status?: ApprovalStatus | null;
+  submitted_by?: string | null;
+  submitted_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  /** Note a founder leaves when asking for changes. */
+  review_note?: string | null;
 };
 
 export const CONTENT_STATUSES: { key: ContentStatus; label: string }[] = [

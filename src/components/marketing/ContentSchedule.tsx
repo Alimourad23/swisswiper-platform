@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { channels } from "@/lib/marketing/channels";
 import { getMedia } from "@/lib/marketing/media-actions";
 import type { ContentMedia } from "@/lib/marketing/media";
-import { createPost, updatePost, deletePost } from "@/lib/marketing/schedule-actions";
+import { createPost, updatePost, deletePost, submitForApproval, approvePost, requestChanges } from "@/lib/marketing/schedule-actions";
 import { syncPostCalendar, clearPostCalendar } from "@/lib/marketing/calendar-sync";
-import { CONTENT_STATUSES, type ContentPost, type ContentStatus } from "@/lib/marketing/schedule";
+import { CONTENT_STATUSES, APPROVAL_LABELS, type ContentPost, type ContentStatus, type ApprovalStatus } from "@/lib/marketing/schedule";
 import ContentStudio from "@/components/marketing/ContentStudio";
 import MonthGrid from "@/components/marketing/MonthGrid";
 import PublishNow from "@/components/marketing/PublishNow";
@@ -16,6 +16,13 @@ const STATUS_STYLE: Record<ContentStatus, string> = {
   draft: "bg-amber-500/15 text-amber-700",
   scheduled: "bg-peri-soft text-peri-deep",
   published: "bg-emerald-500/15 text-emerald-700",
+};
+
+const APPROVAL_STYLE: Record<ApprovalStatus, string> = {
+  none: "bg-line text-hint",
+  pending: "bg-amber-500/15 text-amber-700",
+  approved: "bg-emerald-500/15 text-emerald-700",
+  changes: "bg-red-500/15 text-red-600",
 };
 
 function channelName(key: string): string {
@@ -159,6 +166,23 @@ export default function ContentSchedule({
     setPosts((p) => p.filter((x) => x.id !== id));
     void clearPostCalendar(id).then(() => deletePost(id));
   };
+  // ── approval workflow ──
+  async function submitApproval(id: string) {
+    patch(id, { approval_status: "pending", review_note: null });
+    const r = await submitForApproval(id);
+    if (!r.ok) patch(id, { approval_status: "none" });
+  }
+  async function approve(id: string) {
+    patch(id, { approval_status: "approved", review_note: null });
+    const r = await approvePost(id);
+    if (!r.ok) patch(id, { approval_status: "pending" });
+  }
+  async function reqChanges(id: string) {
+    const note = window.prompt("What needs to change before this can go out? (optional)") ?? undefined;
+    patch(id, { approval_status: "changes", review_note: note ?? null });
+    const r = await requestChanges(id, note);
+    if (!r.ok) patch(id, { approval_status: "pending" });
+  }
   const toggleExpand = (id: string) => setExpandedId((c) => (c === id ? null : id));
   const bodyChange = (id: string, b: string) => patch(id, { body: b });
   const bodySave = (id: string, b: string) => {
@@ -308,6 +332,10 @@ export default function ContentSchedule({
                   onTitle={setTitleOf}
                   onSaveTitle={saveTitle}
                   onRemove={remove}
+                  isFounder={isFounder}
+                  onSubmit={submitApproval}
+                  onApprove={approve}
+                  onRequestChanges={reqChanges}
                 />
               ))}
             </Section>
@@ -327,6 +355,10 @@ export default function ContentSchedule({
                   onTitle={setTitleOf}
                   onSaveTitle={saveTitle}
                   onRemove={remove}
+                  isFounder={isFounder}
+                  onSubmit={submitApproval}
+                  onApprove={approve}
+                  onRequestChanges={reqChanges}
                 />
               ))}
             </Section>
@@ -381,6 +413,10 @@ function Row({
   onTitle,
   onSaveTitle,
   onRemove,
+  isFounder = false,
+  onSubmit,
+  onApprove,
+  onRequestChanges,
 }: {
   post: ContentPost;
   expanded: boolean;
@@ -392,7 +428,12 @@ function Row({
   onTitle: (id: string, t: string) => void;
   onSaveTitle: (id: string, t: string) => void;
   onRemove: (id: string) => void;
+  isFounder?: boolean;
+  onSubmit: (id: string) => void;
+  onApprove: (id: string) => void;
+  onRequestChanges: (id: string) => void;
 }) {
+  const approval = (post.approval_status ?? "none") as ApprovalStatus;
   const [previewMedia, setPreviewMedia] = useState<ContentMedia[]>([]);
   // Load the post's media (for the at-a-glance preview) only when the row opens.
   useEffect(() => {
@@ -422,6 +463,14 @@ function Row({
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[post.status]}`}>
           {CONTENT_STATUSES.find((s) => s.key === post.status)?.label}
         </span>
+        {post.status !== "published" && (
+          <span
+            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${APPROVAL_STYLE[approval]}`}
+            title={post.review_note ? `Changes requested: ${post.review_note}` : APPROVAL_LABELS[approval]}
+          >
+            {APPROVAL_LABELS[approval]}
+          </span>
+        )}
         <input
           value={post.title}
           onChange={(e) => onTitle(post.id, e.target.value)}
@@ -470,6 +519,35 @@ function Row({
         >
           Studio ⤢
         </button>
+        {/* Approval actions. Editors submit; founders approve or send back.
+            Once approved, the submit button is replaced by the Approved chip above. */}
+        {post.status !== "published" && (approval === "none" || approval === "changes") && (
+          <button
+            type="button"
+            onClick={() => onSubmit(post.id)}
+            className="shrink-0 rounded-full border border-hairline px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-peri-deep"
+          >
+            Submit for approval
+          </button>
+        )}
+        {post.status !== "published" && approval === "pending" && isFounder && (
+          <>
+            <button
+              type="button"
+              onClick={() => onApprove(post.id)}
+              className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-700 transition-colors hover:brightness-95"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={() => onRequestChanges(post.id)}
+              className="shrink-0 rounded-full px-2 py-1 text-xs font-medium text-hint transition-colors hover:text-red-600"
+            >
+              Request changes
+            </button>
+          </>
+        )}
         <PublishNow
           variant="row"
           postId={post.id}

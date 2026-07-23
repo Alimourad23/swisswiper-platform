@@ -51,6 +51,7 @@ export async function publishDueInstagramPosts(
     .eq("channel", "instagram")
     .eq("status", "scheduled")
     .eq("auto_publish", true)
+    .eq("approval_status", "approved") // never auto-publish anything unapproved
     .is("publish_status", null)
     .gte("scheduled_for", dateStr(windowStart))
     .lte("scheduled_for", dateStr(today))
