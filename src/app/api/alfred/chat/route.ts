@@ -4,8 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGoogleAccessToken } from "@/lib/google/tokens";
 import { getInboxView, type InboxView } from "@/lib/google/gmail";
 import { getCalendarData, type CalEventRaw } from "@/lib/google/calendar";
-import { getLinkedInMetrics } from "@/lib/linkedin/data";
-import { windowAgg } from "@/lib/linkedin/compute";
+import { getMarketingSummary } from "@/lib/marketing/summary";
 import { getTasksData, type TasksData } from "@/lib/tasks/data";
 import { displayName } from "@/lib/tasks/format";
 
@@ -199,25 +198,6 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["items"],
     },
   },
-  {
-    name: "create_post",
-    description:
-      "PROPOSE planning a marketing post in the content pipeline (LinkedIn, Instagram, TikTok, YouTube, or the website). Only a proposal — the app shows an editable review and confirms before creating. Include a one-line seedIdea creative brief so the Content Studio can auto-draft the caption from it later.",
-    input_schema: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Short working title / topic of the post." },
-        channel: {
-          type: "string",
-          enum: ["linkedin", "instagram", "tiktok", "youtube", "website"],
-        },
-        date: { type: "string", description: "Planned post date, absolute YYYY-MM-DD. Convert relative dates yourself. Omit if undated." },
-        seedIdea: { type: "string", description: "One-line creative brief for the caption, in the SwissWiper voice." },
-        goal: { type: "string", enum: ["awareness", "followers", "inquiries", "community"] },
-      },
-      required: ["title", "channel"],
-    },
-  },
 ];
 
 export async function POST(req: Request) {
@@ -297,7 +277,7 @@ Manner: warm, loyal, understated. A light, dry wit — never slapstick. Address 
 
 This is spoken aloud, so keep replies short — usually one or two sentences. Lead with the answer. No markdown, bullet points, or emoji — plain spoken English.
 
-Marketing: the LinkedIn figures in the briefing ARE the marketing performance data — answer "how's marketing?" from them.
+Marketing: the figures below cover both LinkedIn and Instagram (followers, reach, engagement, total audience) — answer "how's marketing?" from them, and mention both channels when relevant.
 
 About SwissWiper (use this whenever you draft an email or answer about the company): SwissWiper is a luxury hard-water glass-care brand — a precision wiper and care system that keeps glass (shower screens, balustrades, facades) flawless in hard-water regions. Positioning is understated luxury: calm, exact, no hype. Voice when writing on ${firstName}'s behalf: refined, warm, confident, and brief; never use discounting or pushy sales language; prefer "commission" over "buy/order"; never qualify or undercut the price. ${firstName} is the founder. When you draft a reply, READ the original email provided to you and respond to its actual content in this voice, sign off as ${firstName} unless told otherwise, and keep it concise.
 
@@ -305,7 +285,6 @@ You can take actions through tools. CRITICAL: to DO anything — create a task, 
 - navigate(destination): immediate; give a brief spoken confirmation.
 - create_task / set_task_status: the team to-do. Real teammates only (roster below); absolute YYYY-MM-DD due dates (today is ${todayIso}).
 - plan_day: when ${firstName} asks you to plan today / set up his day / "what should I focus on", propose today's plan with plan_day — pick from his OPEN tasks (overdue and due-today first, then high priority), estimate minutes for each, and keep the total realistic (~6h, less if today's calendar is busy).
-- create_post: the marketing content pipeline. When ${firstName} asks to plan or schedule a social post (an Instagram post, LinkedIn post, etc.), propose it with create_post — short title, channel, absolute YYYY-MM-DD date (today is ${todayIso}), and a one-line seedIdea brief in the SwissWiper voice (understated luxury; "commission", never "buy"). The caption itself is written in the Content Studio afterwards, auto-drafted from the seedIdea — so do NOT write the full caption here.
 - draft_reply / draft_email: compose email saved as a DRAFT in Gmail — you do NOT send. After confirming, say "I've drafted it in your Gmail." Match emailRef to a recent email below. When the user's message includes the original email text, your SPOKEN reply for the proposal should: (1) in one short sentence, say what their email is about; (2) read your drafted reply aloud; (3) offer "Shall I send it, save it as a draft, redraft, or cancel?". Keep it natural, not robotic. You can also be asked to add/remove/move recipients between To, Cc and Bcc — use the cc/bcc fields (names or emails) and keep the rest of the draft intact.
 - send_email: actually SENDS — use ONLY when ${firstName} clearly says to send it. Default to drafting; the app confirms sending separately.
 - create_event / reschedule_event / cancel_event / add_attendees: the primary calendar. Times are ISO 8601 local in ${firstName}'s timezone (e.g. 2026-06-22T15:00). Match eventRef to an upcoming event below. Cancelling needs a clear confirm. add_attendees adds guests to (or forwards) an existing event. create_event can repeat (recurrence: none/daily/weekly/weekdays/monthly).
@@ -486,15 +465,17 @@ async function buildContext(
   }
 
   try {
-    const { metrics: li } = await getLinkedInMetrics();
-    const agg = windowAgg(li, 365);
+    const mkt = await getMarketingSummary();
+    const ig = mkt.instagram
+      ? ` Instagram: ${mkt.instagram.followers.toLocaleString()} followers.`
+      : " Instagram isn't connected right now.";
     lines.push(
-      `Marketing (LinkedIn, last 365 days): ${li.followersAllTime.toLocaleString()} followers, ${agg.impressions.toLocaleString()} impressions, ${(
-        agg.engagementRate * 100
-      ).toFixed(1)}% engagement.`,
+      `Marketing (last 365 days). LinkedIn: ${mkt.linkedin.followers.toLocaleString()} followers, ${mkt.linkedin.impressions.toLocaleString()} impressions, ${mkt.linkedin.engagementRatePct.toFixed(
+        1,
+      )}% engagement.${ig} Total audience across channels: ${mkt.totalAudience.toLocaleString()}.`,
     );
   } catch {
-    lines.push("Marketing (LinkedIn) figures are momentarily unavailable.");
+    lines.push("Marketing figures are momentarily unavailable.");
   }
 
   return lines.length ? lines.join("\n") : "No live data is available at the moment.";

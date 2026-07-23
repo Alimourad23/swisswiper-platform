@@ -11,7 +11,11 @@ export type BridgeData = {
   events: CalEventRaw[] | null;
   myOpenTasks: number;
   myTaskDueDates: (string | null)[];
-  marketing: { followers: number; engagementRatePct: number } | null;
+  marketing: {
+    totalAudience: number;
+    linkedin: { followers: number; engagementRatePct: number };
+    instagram: { followers: number } | null;
+  } | null;
 };
 
 export type BriefingMode = "full" | "short";
@@ -123,12 +127,16 @@ export function composeBriefing(
     if (extra.length) taskLine += ` — ${extra.join(", ")}`;
   }
 
-  // ── Marketing pulse ───────────────────────────────────────────────────
+  // ── Marketing pulse (LinkedIn + Instagram) ────────────────────────────
   let marketingLine: string | null = null;
   if (data.marketing) {
-    marketingLine = `LinkedIn — ${data.marketing.followers.toLocaleString()} followers at ${data.marketing.engagementRatePct.toFixed(
-      1,
-    )}% engagement`;
+    const m = data.marketing;
+    const eng = m.linkedin.engagementRatePct.toFixed(1);
+    if (m.instagram) {
+      marketingLine = `Audience — ${m.linkedin.followers.toLocaleString()} on LinkedIn, ${m.instagram.followers.toLocaleString()} on Instagram; ${eng}% LinkedIn engagement`;
+    } else {
+      marketingLine = `LinkedIn — ${m.linkedin.followers.toLocaleString()} followers at ${eng}% engagement`;
+    }
   }
 
   const lines = [meetingLine, emailLine, taskLine, marketingLine].filter(

@@ -11,8 +11,7 @@ import { getInboxView, type InboxView } from "@/lib/google/gmail";
 import { getCalendarData } from "@/lib/google/calendar";
 import OverviewToday from "@/components/calendar/OverviewToday";
 import MeetingsTodayKpi from "@/components/calendar/MeetingsTodayKpi";
-import { getLinkedInMetrics } from "@/lib/linkedin/data";
-import { windowAgg, decisionMakerShare } from "@/lib/linkedin/compute";
+import { getMarketingSummary } from "@/lib/marketing/summary";
 import { getTasksData } from "@/lib/tasks/data";
 import TasksPulse from "@/components/tasks/TasksPulse";
 import DashboardToday from "@/components/tasks/DashboardToday";
@@ -52,16 +51,13 @@ export default async function OverviewPage() {
 
 async function OverviewBody({ firstName }: { firstName: string }) {
   const token = await getGoogleAccessToken();
-  const [gmail, calendar, liResult, tasksResult] = await Promise.all([
+  const [gmail, calendar, mkt, tasksResult] = await Promise.all([
     token ? getInboxView(token).catch(() => null) : Promise.resolve<InboxView | null>(null),
     token ? getCalendarData(token).catch(() => null) : Promise.resolve(null),
-    getLinkedInMetrics(),
+    getMarketingSummary(),
     getTasksData(),
   ]);
 
-  const li = liResult.metrics;
-  const liAgg = windowAgg(li, 365);
-  const liDm = decisionMakerShare(li);
   const { tasks, userId } = tasksResult;
 
   return (
@@ -125,13 +121,13 @@ async function OverviewBody({ firstName }: { firstName: string }) {
         <Panel title="Tasks pulse" badges={<><LivePill /><ServiceBadge label="Team" /></>}>
           <TasksPulse tasks={tasks} userId={userId} />
         </Panel>
-        <Panel title="Marketing pulse" badges={<><LivePill /><ServiceBadge label="LinkedIn" /></>}>
+        <Panel title="Marketing pulse" badges={<><LivePill /><ServiceBadge label="LinkedIn + Instagram" /></>}>
           <div className="py-3.5">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MiniStat label="Audience" value={li.followersAllTime.toLocaleString("en-US")} />
-              <MiniStat label="Reach" value={liAgg.impressions.toLocaleString("en-US")} />
-              <MiniStat label="Engagement rate" value={(liAgg.engagementRate * 100).toFixed(1) + "%"} />
-              <MiniStat label="Decision-maker share" value={(liDm.pct * 100).toFixed(0) + "%"} />
+              <MiniStat label="Total audience" value={mkt.totalAudience.toLocaleString("en-US")} />
+              <MiniStat label="LinkedIn" value={mkt.linkedin.followers.toLocaleString("en-US")} />
+              <MiniStat label="Instagram" value={mkt.instagram ? mkt.instagram.followers.toLocaleString("en-US") : "—"} />
+              <MiniStat label="LinkedIn engagement" value={mkt.linkedin.engagementRatePct.toFixed(1) + "%"} />
             </div>
             <Link href="/dashboard/marketing" className="mt-3.5 inline-block text-[12px] font-medium text-peri-deep hover:underline">
               View Marketing →

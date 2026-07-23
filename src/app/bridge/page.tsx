@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGoogleAccessToken } from "@/lib/google/tokens";
 import { getInboxView, type InboxView } from "@/lib/google/gmail";
 import { getCalendarData } from "@/lib/google/calendar";
-import { getLinkedInMetrics } from "@/lib/linkedin/data";
-import { windowAgg } from "@/lib/linkedin/compute";
+import { getMarketingSummary } from "@/lib/marketing/summary";
 import { getTasksData } from "@/lib/tasks/data";
 import type { BridgeData } from "@/lib/bridge/briefing";
 
@@ -41,9 +40,8 @@ export default async function BridgePage() {
     }
   }
 
-  // Marketing pulse (LinkedIn — latest export, falls back to seed).
-  const { metrics: li } = await getLinkedInMetrics();
-  const liAgg = windowAgg(li, 365);
+  // Marketing pulse — one shared summary (LinkedIn + Instagram).
+  const mkt = await getMarketingSummary();
 
   // My open tasks (creator or assignee, not done, not trashed). Due dates are
   // sent raw so the client can bucket overdue/due-today in its own timezone.
@@ -68,8 +66,9 @@ export default async function BridgePage() {
     myOpenTasks: mine.length,
     myTaskDueDates: mine.map((t) => t.due_at),
     marketing: {
-      followers: li.followersAllTime,
-      engagementRatePct: liAgg.engagementRate * 100,
+      totalAudience: mkt.totalAudience,
+      linkedin: { followers: mkt.linkedin.followers, engagementRatePct: mkt.linkedin.engagementRatePct },
+      instagram: mkt.instagram ? { followers: mkt.instagram.followers } : null,
     },
   };
 
