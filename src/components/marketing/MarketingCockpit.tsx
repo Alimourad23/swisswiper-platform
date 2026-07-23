@@ -26,7 +26,7 @@ import type { Objective } from "@/lib/marketing/okr";
    Styling is scoped to `.mc-*` classes so it can't collide with the app.
    ──────────────────────────────────────────────────────────────────────── */
 
-export type IgLite = { username: string; followers: number; mediaCount: number } | null;
+export type IgLite = { username: string; followers: number; mediaCount: number; reach28: number | null; avgEngagementPerPost: number } | null;
 
 type Props = {
   metrics: LinkedInMetrics;
@@ -122,7 +122,7 @@ export default function MarketingCockpit({ metrics, ig, posts, plan, objectives,
     insights.push({
       chip: "◎", bg: "var(--a-pink-bg)", fg: "var(--a-pink)",
       title: "Instagram is live",
-      body: `@${ig.username} — ${nf(ig.followers)} followers, ${ig.mediaCount} posts. Per-post reach is on the Instagram page.`,
+      body: `@${ig.username} — ${nf(ig.followers)} followers${ig.reach28 != null ? `, ${nf(ig.reach28)} reach in 28 days` : ""}, ${ig.avgEngagementPerPost.toFixed(1)} avg engagement per post.`,
     });
   } else {
     insights.push({
@@ -212,7 +212,7 @@ export default function MarketingCockpit({ metrics, ig, posts, plan, objectives,
               <thead><tr><th>Channel</th><th>Foll.</th><th>Eng.</th><th>Reach</th></tr></thead>
               <tbody>
                 <tr><td><span className="mc-ctile" style={{ background: "var(--s-linkedin)" }}>in</span>LinkedIn</td><td>{nf(metrics.followersAllTime ?? 0)}</td><td>{pct1(a.engagementRate)}</td><td>{nf(a.impressions)}</td></tr>
-                <tr><td><span className="mc-ctile" style={{ background: "var(--s-instagram)" }}>◎</span>Instagram</td>{ig ? (<><td>{nf(ig.followers)}</td><td className="mc-soft">on IG page</td><td className="mc-soft">new</td></>) : (<td colSpan={3} className="mc-soft">not connected yet</td>)}</tr>
+                <tr><td><span className="mc-ctile" style={{ background: "var(--s-instagram)" }}>◎</span>Instagram</td>{ig ? (<><td>{nf(ig.followers)}</td><td>{ig.avgEngagementPerPost ? ig.avgEngagementPerPost.toFixed(1) : "—"}</td><td>{ig.reach28 != null ? nf(ig.reach28) : "—"}</td></>) : (<td colSpan={3} className="mc-soft">not connected yet</td>)}</tr>
                 <tr className="mc-soonrow"><td><span className="mc-ctile" style={{ background: "var(--peri)" }}>◍</span>Website</td><td colSpan={2} className="mc-soft">analytics with revamp</td><td><a className="mc-viewall" href="https://swisswiper.com/" target="_blank" rel="noopener">Visit ↗</a></td></tr>
               </tbody>
             </table>

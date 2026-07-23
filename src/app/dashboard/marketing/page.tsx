@@ -4,7 +4,7 @@ import { getLinkedInMetrics } from "@/lib/linkedin/data";
 import { windowAgg } from "@/lib/linkedin/compute";
 import { getContentPosts } from "@/lib/marketing/schedule-actions";
 import { getPlan } from "@/lib/marketing/plan-actions";
-import { getInstagramLite } from "@/lib/marketing/instagram-data";
+import { getInstagramPulse } from "@/lib/marketing/instagram-data";
 import { getOkrs } from "@/lib/marketing/okr-actions";
 import { objectivesFrom } from "@/lib/marketing/okr";
 import { createClient } from "@/lib/supabase/server";
@@ -42,7 +42,7 @@ async function MarketingData() {
     getLinkedInMetrics(),
     getContentPosts(),
     getPlan(),
-    getInstagramLite(),
+    getInstagramPulse(),
     getOkrs(),
     getInquiries(),
   ]);

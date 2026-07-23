@@ -153,3 +153,24 @@ export async function getInstagramLite(): Promise<IgLite> {
     return null;
   }
 }
+
+/* Mid-weight pulse for the Marketing cockpit — followers + 28-day reach + average
+   engagement per post, in ~3 API calls (no per-post insights). Enough to show a
+   real Instagram row in the executive summary without the full analytics cost. */
+export type IgPulse =
+  | { username: string; followers: number; mediaCount: number; reach28: number | null; avgEngagementPerPost: number }
+  | null;
+
+export async function getInstagramPulse(): Promise<IgPulse> {
+  if (!(await hasInstagramConnection())) return null;
+  try {
+    const s = await getInstagramAccountStats();
+    const [media, reach28] = await Promise.all([getRecentMedia(24), tryAccountReach28(s.userId)]);
+    const totalLikes = media.reduce((n, m) => n + m.likeCount, 0);
+    const totalComments = media.reduce((n, m) => n + m.commentsCount, 0);
+    const avgEngagementPerPost = media.length ? Math.round(((totalLikes + totalComments) / media.length) * 10) / 10 : 0;
+    return { username: s.username, followers: s.followersCount, mediaCount: s.mediaCount, reach28, avgEngagementPerPost };
+  } catch {
+    return null;
+  }
+}
